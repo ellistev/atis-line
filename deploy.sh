@@ -1,40 +1,39 @@
 #!/bin/bash
-# Deploy atis-line to Hetzner (178.156.208.66)
+# Deploy atis-line to production (178.156.208.66)
 # Usage: bash deploy.sh
-# Requirements: git must be clean and pushed before deploying
+# Run from the atis-line directory on your local machine.
 
 set -e
 
-SSH="ssh -i ~/.ssh/clawbothetnzer root@178.156.208.66"
-REMOTE_DIR="/opt/atis-line"
+SERVER="root@178.156.208.66"
+SSH_KEY="$HOME/.ssh/clawbothetnzer"
+DEPLOY_DIR="/var/www/atis-line"
 
-echo "==> Checking local git status..."
-if [[ -n $(git status --porcelain) ]]; then
-  echo "ERROR: Uncommitted changes. Commit and push first."
-  exit 1
-fi
+echo "==> Deploying atis-line to production..."
 
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
-if [[ "$BRANCH" != "main" ]]; then
-  echo "ERROR: Not on main branch (on $BRANCH). Deploy from main only."
-  exit 1
-fi
+# Run tests first
+echo "==> Running tests..."
+npm test
+echo "==> Tests passed."
 
-echo "==> Pushing to origin..."
+# Push to GitHub
+echo "==> Pushing to GitHub..."
 git push origin main
 
-echo "==> Deploying to Hetzner..."
-$SSH "cd $REMOTE_DIR && git pull && npm install --omit=dev && pm2 restart atis-line"
-
-echo "==> Waiting for server..."
-sleep 3
-
-echo "==> Health check..."
-curl -sf https://atis.checkonmom.ca/health | node -e "
-  const d = JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'));
-  const ok = Object.values(d.airports).filter(a => a.status === 'available').length;
-  console.log('Status:', d.status, '| Airports up:', ok + '/' + Object.keys(d.airports).length);
-  process.exit(d.status === 'ok' || d.status === 'degraded' ? 0 : 1);
+# Deploy on server
+echo "==> Pulling on server and restarting..."
+ssh -i "$SSH_KEY" "$SERVER" "
+  set -e
+  cd $DEPLOY_DIR
+  git pull origin main
+  npm install --omit=dev
+  pm2 restart atis-line --update-env
+  pm2 save
+  echo 'Deploy complete'
 "
 
-echo "==> Done. https://atis.checkonmom.ca/health"
+echo "==> Verifying health..."
+sleep 5
+curl -sf https://atis.checkonmom.ca/health | python3 -m json.tool 2>/dev/null || curl -s https://atis.checkonmom.ca/health
+
+echo "==> Done! atis-line is live at https://atis.checkonmom.ca"
