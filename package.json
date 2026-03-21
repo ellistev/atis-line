@@ -1,0 +1,14 @@
+{
+  "name": "atis-line",
+  "version": "0.1.0",
+  "description": "Metro Vancouver ATIS phone line - call for airport weather",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "twilio": "^5.0.0"
+  }
+}
