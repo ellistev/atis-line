@@ -32,7 +32,10 @@ app.post('/voice', (req, res) => {
   gather.say({
     voice: 'Polly.Joanna',
     language: 'en-US',
-  }, 'Metro Vancouver A-T-I-S. ' +
+  }, 'Metro Vancouver aviation weather. ' +
+     'This is an unofficial automated service and is not affiliated with NAV CANADA. ' +
+     'Information is provided as a convenience only and should not be used as a sole source for flight planning. ' +
+     'Always verify conditions through official sources. ' +
      'Press 1 for Pitt Meadows. ' +
      'Press 2 for Boundary Bay. ' +
      'Press 3 for Vancouver Harbour. ' +
