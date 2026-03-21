@@ -29,8 +29,9 @@ async function updateCache(icao, speechText, letter) {
   const newHash = hashText(speechText);
   const existing = cache.get(icao);
 
-  // No change — return existing cache
+  // No change — update timestamp and return existing cache
   if (existing && existing.speechHash === newHash) {
+    existing.updatedAt = new Date().toISOString();
     return existing;
   }
 
@@ -51,6 +52,7 @@ async function updateCache(icao, speechText, letter) {
     audioFile,
     hasAudio,
     letter,
+    updatedAt: new Date().toISOString(),
   };
   cache.set(icao, entry);
   return entry;
