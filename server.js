@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('node:path');
 const twilio = require('twilio');
+const log = require('./src/logger');
 const { getAtisLetter, formatAtis } = require('./src/speech/formatter');
 const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
 const { getTwilioVoice } = require('./src/audio/tts');
@@ -114,7 +115,7 @@ async function fetchMetar(icao) {
     const text = await res.text();
     return text.trim() || null;
   } catch (err) {
-    console.error(`METAR fetch failed for ${icao}:`, err.message);
+    log.error(`METAR fetch failed for ${icao}:`, err.message);
     return null;
   }
 }
@@ -126,7 +127,7 @@ async function fetchTaf(icao) {
     const text = await res.text();
     return text.trim() || null;
   } catch (err) {
-    console.error(`TAF fetch failed for ${icao}:`, err.message);
+    log.error(`TAF fetch failed for ${icao}:`, err.message);
     return null;
   }
 }
@@ -173,7 +174,7 @@ function formatMetarForSpeech(metar, airportName) {
 }
 
 async function refreshAtisData() {
-  console.log(`[${new Date().toISOString()}] Refreshing ATIS data...`);
+  log.info(`[${new Date().toISOString()}] Refreshing ATIS data...`);
 
   for (const [digit, airport] of Object.entries(AIRPORTS)) {
     const metar = await fetchMetar(airport.icao);
@@ -201,22 +202,24 @@ async function refreshAtisData() {
 
       // Update audio cache (regenerates audio only if text changed)
       await updateCache(airport.icao, fullSpeech, letter);
-      console.log(`  ${airport.icao}: information ${letter}${airport.hasTaf ? ' (with forecast)' : ''}`);
+      log.info(`  ${airport.icao}: information ${letter}${airport.hasTaf ? ' (with forecast)' : ''}`);
     } else {
-      console.log(`  ${airport.icao}: no data`);
+      log.info(`  ${airport.icao}: no data`);
     }
   }
 }
 
-// Verify airports and start refresh cycle
-verifyAirports(AIRPORTS).then(() => {
-  refreshAtisData();
-  setInterval(refreshAtisData, 5 * 60 * 1000);
-});
+if (require.main === module) {
+  // Verify airports and start refresh cycle
+  verifyAirports(AIRPORTS).then(() => {
+    refreshAtisData();
+    setInterval(refreshAtisData, 5 * 60 * 1000);
+  });
 
-app.listen(port, () => {
-  console.log(`ATIS Line server listening on port ${port}`);
-  console.log(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
-});
+  app.listen(port, () => {
+    log.info(`ATIS Line server listening on port ${port}`);
+    log.info(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
+  });
+}
 
 module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, fetchTaf, formatMetarForSpeech };
