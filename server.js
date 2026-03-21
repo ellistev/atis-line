@@ -2,6 +2,7 @@ const express = require('express');
 const twilio = require('twilio');
 const { loadAirports, getRegions, generateTopGreeting, generateRegionGreeting } = require('./src/config/airports');
 const { scrapeAll } = require('./src/data/aeroview');
+const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
 const { getRandomSignOff, getRandomJoke, ABOUT_TEXT } = require('./src/personality');
 
 const app = express();
@@ -9,14 +10,15 @@ const port = process.env.PORT || 3338;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${port}`;
 
 app.use(express.urlencoded({ extended: false }));
+app.use('/audio', express.static(AUDIO_DIR));
 
 // --- Airport config ---
 const AIRPORTS_LIST = loadAirports();
 const REGIONS = getRegions(AIRPORTS_LIST);
 const ALL_ICAOS = AIRPORTS_LIST.map(a => a.icao);
 
-// --- ATIS cache: Map<icao, { raw, letter, speechText, updatedAt }> ---
-const cache = new Map();
+// In-memory ATIS data (raw + speech text) - audio file caching handled by cache-manager
+const atisData = new Map();
 
 const VOICE = { voice: 'Polly.Joanna', language: 'en-US' };
 const VOICE_SLOW = { voice: 'Polly.Joanna', language: 'en-US', rate: '85%' };
@@ -93,14 +95,20 @@ app.post('/select-airport/:regionDigit', (req, res) => {
     return res.type('text/xml').send(twiml.toString());
   }
 
-  const data = cache.get(airport.icao);
-  if (!data) {
+  const cached = getCache(airport.icao);
+  if (!cached) {
     twiml.say(VOICE, `${airport.name} ATIS is currently unavailable. Please try again shortly.`);
     twiml.redirect('/voice');
     return res.type('text/xml').send(twiml.toString());
   }
 
-  twiml.say(VOICE_SLOW, data.speechText);
+  // Play pre-generated audio if available, otherwise fall back to Polly
+  const audioUrl = getAudioUrl(airport.icao, BASE_URL);
+  if (audioUrl) {
+    twiml.play(audioUrl);
+  } else {
+    twiml.say(VOICE_SLOW, cached.speechText);
+  }
   twiml.pause({ length: 1 });
   twiml.say(VOICE, getRandomSignOff());
 
@@ -130,10 +138,10 @@ app.post('/region-menu/:regionDigit', (req, res) => {
 app.get('/health', (req, res) => {
   const airports = {};
   let anyMissing = false;
-  for (const { icao, name } of AIRPORTS_LIST) {
-    const d = cache.get(icao);
+  for (const { icao } of AIRPORTS_LIST) {
+    const d = getCache(icao);
     if (d) {
-      airports[icao] = { status: 'available', letter: d.letter, updatedAt: d.updatedAt };
+      airports[icao] = { status: 'available', letter: d.letter, hasAudio: d.hasAudio, updatedAt: d.updatedAt };
     } else {
       airports[icao] = { status: 'unavailable' };
       anyMissing = true;
@@ -178,12 +186,7 @@ async function refreshAtisData() {
     const result = results.get(icao);
     if (result && result.raw) {
       const speechText = formatForSpeech(result.raw, icao, name, result.letter);
-      cache.set(icao, {
-        raw: result.raw,
-        letter: result.letter,
-        speechText,
-        updatedAt: new Date().toISOString(),
-      });
+      await updateCache(icao, speechText, result.letter);
       console.log(`  ${icao}: information ${result.letter || '?'}`);
     } else {
       console.log(`  ${icao}: no data`);
