@@ -1,10 +1,18 @@
 const express = require('express');
+const path = require('node:path');
 const twilio = require('twilio');
+const { getAtisLetter, formatAtis } = require('./src/speech/formatter');
+const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
+const { getTwilioVoice } = require('./src/audio/tts');
 
 const app = express();
 const port = process.env.PORT || 3338;
+const BASE_URL = process.env.BASE_URL || `http://localhost:${port}`;
 
 app.use(express.urlencoded({ extended: false }));
+
+// Serve cached audio files
+app.use('/audio', express.static(AUDIO_DIR));
 
 // Airport configuration
 const AIRPORTS = {
@@ -15,36 +23,32 @@ const AIRPORTS = {
   '5': { icao: 'CYVR', name: 'Vancouver International' },
 };
 
-// ATIS data cache - refreshed every 5 minutes
-const atisCache = new Map();
-
 // Twilio webhook - incoming call
 app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
-  
+  const voice = getTwilioVoice();
+
   const gather = twiml.gather({
     numDigits: 1,
     action: '/select-airport',
     method: 'POST',
     timeout: 10,
   });
-  
-  gather.say({
-    voice: 'Polly.Joanna',
-    language: 'en-US',
-  }, 'Metro Vancouver aviation weather. ' +
-     'This is an unofficial automated service and is not affiliated with NAV CANADA. ' +
-     'Information is provided as a convenience only and should not be used as a sole source for flight planning. ' +
-     'Always verify conditions through official sources. ' +
-     'Press 1 for Pitt Meadows. ' +
-     'Press 2 for Boundary Bay. ' +
-     'Press 3 for Vancouver Harbour. ' +
-     'Press 4 for Langley. ' +
-     'Press 5 for Vancouver International.');
-  
+
+  gather.say(voice,
+    'Metro Vancouver aviation weather. ' +
+    'This is an unofficial automated service and is not affiliated with NAV CANADA. ' +
+    'Information is provided as a convenience only and should not be used as a sole source for flight planning. ' +
+    'Always verify conditions through official sources. ' +
+    'Press 1 for Pitt Meadows. ' +
+    'Press 2 for Boundary Bay. ' +
+    'Press 3 for Vancouver Harbour. ' +
+    'Press 4 for Langley. ' +
+    'Press 5 for Vancouver International.');
+
   // If no input, repeat
   twiml.redirect('/voice');
-  
+
   res.type('text/xml');
   res.send(twiml.toString());
 });
@@ -54,29 +58,34 @@ app.post('/select-airport', async (req, res) => {
   const digit = req.body.Digits;
   const airport = AIRPORTS[digit];
   const twiml = new twilio.twiml.VoiceResponse();
-  
+  const voice = getTwilioVoice();
+
   if (!airport) {
-    twiml.say({ voice: 'Polly.Joanna' }, 'Invalid selection.');
+    twiml.say(voice, 'Invalid selection.');
     twiml.redirect('/voice');
     res.type('text/xml');
     return res.send(twiml.toString());
   }
-  
+
   // Get cached ATIS data
-  const atis = atisCache.get(airport.icao);
-  
-  if (!atis) {
-    twiml.say({ voice: 'Polly.Joanna' }, 
+  const cached = getCache(airport.icao);
+
+  if (!cached) {
+    twiml.say(voice,
       `${airport.name} A-T-I-S is currently unavailable. Please try again later.`);
     twiml.redirect('/voice');
     res.type('text/xml');
     return res.send(twiml.toString());
   }
-  
-  // Read ATIS
-  twiml.say({ voice: 'Polly.Joanna' }, 
-    `${airport.name} A-T-I-S. ${atis}`);
-  
+
+  // Play cached audio if available, otherwise use live TTS
+  const audioUrl = getAudioUrl(airport.icao, BASE_URL);
+  if (audioUrl) {
+    twiml.play(audioUrl);
+  } else {
+    twiml.say(voice, cached.speechText);
+  }
+
   // Option to hear another airport
   const gather = twiml.gather({
     numDigits: 1,
@@ -84,22 +93,28 @@ app.post('/select-airport', async (req, res) => {
     method: 'POST',
     timeout: 5,
   });
-  gather.say({ voice: 'Polly.Joanna' }, 
+  gather.say(voice,
     'Press another number for a different airport, or hang up.');
-  
-  twiml.say({ voice: 'Polly.Joanna' }, 'Goodbye.');
+
+  twiml.say(voice, 'Goodbye.');
   twiml.hangup();
-  
+
   res.type('text/xml');
   res.send(twiml.toString());
 });
 
 // Health check
 app.get('/health', (req, res) => {
-  const cached = Object.fromEntries(
-    [...atisCache.entries()].map(([k, v]) => [k, v ? 'available' : 'unavailable'])
-  );
-  res.json({ status: 'ok', airports: cached });
+  const airports = {};
+  for (const airport of Object.values(AIRPORTS)) {
+    const cached = getCache(airport.icao);
+    airports[airport.icao] = {
+      status: cached ? 'available' : 'unavailable',
+      letter: cached ? cached.letter : null,
+      hasAudio: cached ? cached.hasAudio : false,
+    };
+  }
+  res.json({ status: 'ok', airports });
 });
 
 // ----- ATIS Data Fetching -----
@@ -118,7 +133,7 @@ async function fetchMetar(icao) {
 
 function formatMetarForSpeech(metar, airportName) {
   if (!metar) return null;
-  
+
   // Basic METAR to speech conversion
   let speech = metar
     // Expand common abbreviations
@@ -153,19 +168,23 @@ function formatMetarForSpeech(metar, airportName) {
     // Space out wind direction/speed
     .replace(/(\d{3})(\d{2,3})knots/g, '$1 degrees at $2 knots')
     .replace(/G(\d+)/g, 'gusting $1');
-  
+
   return speech;
 }
 
 async function refreshAtisData() {
   console.log(`[${new Date().toISOString()}] Refreshing ATIS data...`);
-  
+
   for (const [digit, airport] of Object.entries(AIRPORTS)) {
     const metar = await fetchMetar(airport.icao);
     if (metar) {
+      // Get ATIS letter (increments on data change)
+      const letter = getAtisLetter(airport.icao, metar);
+      // Format speech text using basic formatter (formatAtis requires parsed METAR)
       const speech = formatMetarForSpeech(metar, airport.name);
-      atisCache.set(airport.icao, speech);
-      console.log(`  ${airport.icao}: updated`);
+      // Update audio cache (regenerates audio only if text changed)
+      await updateCache(airport.icao, `${airport.name} information ${letter}. ${speech}`, letter);
+      console.log(`  ${airport.icao}: information ${letter}`);
     } else {
       console.log(`  ${airport.icao}: no data`);
     }
@@ -180,3 +199,5 @@ app.listen(port, () => {
   console.log(`ATIS Line server listening on port ${port}`);
   console.log(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
 });
+
+module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, formatMetarForSpeech };
