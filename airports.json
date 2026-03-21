@@ -1,7 +1,10 @@
 [
-  { "icao": "CYPK", "name": "Pitt Meadows", "digit": "1", "hasTaf": false },
-  { "icao": "CZBB", "name": "Boundary Bay", "digit": "2", "hasTaf": false },
-  { "icao": "CYHC", "name": "Vancouver Harbour", "digit": "3", "hasTaf": false },
-  { "icao": "CYNJ", "name": "Langley", "digit": "4", "hasTaf": false },
-  { "icao": "CYVR", "name": "Vancouver International", "digit": "5", "hasTaf": true }
+  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYVR", "name": "Vancouver International", "digit": "1" },
+  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYXX", "name": "Abbotsford", "digit": "2" },
+  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYPK", "name": "Pitt Meadows", "digit": "3" },
+  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CZBB", "name": "Boundary Bay", "digit": "4" },
+  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYHC", "name": "Vancouver Harbour", "digit": "5" },
+  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYNJ", "name": "Langley", "digit": "6" },
+  { "region": "Victoria", "regionDigit": "2", "icao": "CYYJ", "name": "Victoria International", "digit": "1" },
+  { "region": "Victoria", "regionDigit": "2", "icao": "CYCD", "name": "Nanaimo", "digit": "2" }
 ]

@@ -1,16 +1,8 @@
 const express = require('express');
-const path = require('node:path');
 const twilio = require('twilio');
-const log = require('./src/logger');
-const { getAtisLetter, formatAtis } = require('./src/speech/formatter');
-const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
-const { getTwilioVoice } = require('./src/audio/tts');
-const { loadAirports, generateGreeting, verifyAirports } = require('./src/config/airports');
+const { loadAirports, getRegions, generateTopGreeting, generateRegionGreeting } = require('./src/config/airports');
+const { scrapeAll } = require('./src/data/aeroview');
 const { getRandomSignOff, getRandomJoke, ABOUT_TEXT } = require('./src/personality');
-const { parseTaf } = require('./src/data/taf-parser');
-const { formatTafSpeech } = require('./src/data/taf-formatter');
-const { logCall, getStats } = require('./src/analytics/call-logger');
-const { checkRateLimit, isBlocked, checkMonitoringAlerts } = require('./src/security/rate-limiter');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -18,307 +10,168 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${port}`;
 
 app.use(express.urlencoded({ extended: false }));
 
-// Serve cached audio files
-app.use('/audio', express.static(AUDIO_DIR));
+// --- Airport config ---
+const AIRPORTS_LIST = loadAirports();
+const REGIONS = getRegions(AIRPORTS_LIST);
+const ALL_ICAOS = AIRPORTS_LIST.map(a => a.icao);
 
-// Airport configuration - loaded from airports.json
-const AIRPORTS = loadAirports();
+// --- ATIS cache: Map<icao, { raw, letter, speechText, updatedAt }> ---
+const cache = new Map();
 
-// Max call duration in seconds (3 minutes)
-const MAX_CALL_DURATION = 180;
+const VOICE = { voice: 'Polly.Joanna', language: 'en-US' };
 
-// Twilio webhook - incoming call
+// --- IVR: top-level menu ---
 app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
-  const voice = getTwilioVoice();
-  const callerNumber = req.body.From;
-
-  // Check block list
-  if (isBlocked(callerNumber)) {
-    twiml.say(voice, 'This number has been blocked. Goodbye.');
-    twiml.hangup();
-    res.type('text/xml');
-    return res.send(twiml.toString());
-  }
-
-  // Check rate limit
-  const rateCheck = checkRateLimit(callerNumber);
-  if (!rateCheck.allowed) {
-    twiml.say(voice, 'You have exceeded the maximum number of calls. Please try again later. Goodbye.');
-    twiml.hangup();
-    res.type('text/xml');
-    return res.send(twiml.toString());
-  }
-
-  // Check monitoring alerts (non-blocking)
-  checkMonitoringAlerts();
-
-  const gather = twiml.gather({
-    numDigits: 1,
-    action: '/select-airport',
-    method: 'POST',
-    timeout: 10,
-  });
-
-  gather.say(voice, generateGreeting(AIRPORTS));
-
-  // If no input, repeat
+  const gather = twiml.gather({ numDigits: 1, action: '/select-region', method: 'POST', timeout: 10 });
+  gather.say(VOICE, generateTopGreeting(REGIONS));
   twiml.redirect('/voice');
-
-  res.type('text/xml');
-  res.send(twiml.toString());
+  res.type('text/xml').send(twiml.toString());
 });
 
-// Airport selected - read ATIS
-app.post('/select-airport', async (req, res) => {
+// --- IVR: region selected -> airport sub-menu ---
+app.post('/select-region', (req, res) => {
   const digit = req.body.Digits;
-  const airport = AIRPORTS[digit];
   const twiml = new twilio.twiml.VoiceResponse();
-  const voice = getTwilioVoice();
 
-  // Log every call attempt
-  logCall({
-    callSid: req.body.CallSid,
-    callerNumber: req.body.From,
-    airportSelected: airport ? airport.icao : null,
-    duration: req.body.CallDuration || null,
-  });
-
-  // Easter egg: press 9 for aviation joke
+  // Easter eggs at top level
   if (digit === '9') {
-    twiml.say(voice, getRandomJoke());
+    twiml.say(VOICE, getRandomJoke());
     twiml.pause({ length: 1 });
     twiml.redirect('/voice');
-    res.type('text/xml');
-    return res.send(twiml.toString());
+    return res.type('text/xml').send(twiml.toString());
   }
-
-  // Easter egg: press 0 for about this service
   if (digit === '0') {
-    twiml.say(voice, ABOUT_TEXT);
+    twiml.say(VOICE, ABOUT_TEXT);
     twiml.pause({ length: 1 });
     twiml.redirect('/voice');
-    res.type('text/xml');
-    return res.send(twiml.toString());
+    return res.type('text/xml').send(twiml.toString());
   }
 
-  if (!airport) {
-    twiml.say(voice, 'Invalid selection.');
+  const region = REGIONS[digit];
+  if (!region) {
+    twiml.say(VOICE, 'Invalid selection.');
     twiml.redirect('/voice');
-    res.type('text/xml');
-    return res.send(twiml.toString());
+    return res.type('text/xml').send(twiml.toString());
   }
 
-  // Get cached ATIS data
-  const cached = getCache(airport.icao);
-
-  if (!cached) {
-    twiml.say(voice,
-      `${airport.name} A-T-I-S is currently unavailable. Please try again later.`);
-    twiml.redirect('/voice');
-    res.type('text/xml');
-    return res.send(twiml.toString());
-  }
-
-  // Play cached audio if available, otherwise use live TTS
-  const audioUrl = getAudioUrl(airport.icao, BASE_URL);
-  if (audioUrl) {
-    twiml.play(audioUrl);
-  } else {
-    twiml.say(voice, cached.speechText);
-  }
-
-  // Sign-off with personality
-  twiml.say(voice, getRandomSignOff());
-
-  // Option to hear another airport
-  const gather = twiml.gather({
-    numDigits: 1,
-    action: '/select-airport',
-    method: 'POST',
-    timeout: 5,
-  });
-  gather.say(voice,
-    'Press another number for a different airport, or hang up.');
-
-  twiml.say(voice, 'Goodbye.');
-  twiml.hangup();
-
-  res.type('text/xml');
-  res.send(twiml.toString());
+  const gather = twiml.gather({ numDigits: 1, action: `/select-airport/${digit}`, method: 'POST', timeout: 10 });
+  gather.say(VOICE, generateRegionGreeting(region));
+  twiml.redirect('/voice');
+  res.type('text/xml').send(twiml.toString());
 });
 
-// Staleness threshold in milliseconds (30 minutes)
-const STALE_THRESHOLD_MS = 30 * 60 * 1000;
+// --- IVR: airport selected -> read ATIS ---
+app.post('/select-airport/:regionDigit', (req, res) => {
+  const { regionDigit } = req.params;
+  const digit = req.body.Digits;
+  const twiml = new twilio.twiml.VoiceResponse();
 
-// Health check
+  const region = REGIONS[regionDigit];
+  if (!region) {
+    twiml.redirect('/voice');
+    return res.type('text/xml').send(twiml.toString());
+  }
+
+  const airport = region.airports.find(a => a.digit === digit);
+  if (!airport) {
+    twiml.say(VOICE, 'Invalid selection.');
+    twiml.redirect(`/select-region`);
+    return res.type('text/xml').send(twiml.toString());
+  }
+
+  const data = cache.get(airport.icao);
+  if (!data) {
+    twiml.say(VOICE, `${airport.name} ATIS is currently unavailable. Please try again shortly.`);
+    twiml.redirect('/voice');
+    return res.type('text/xml').send(twiml.toString());
+  }
+
+  twiml.say(VOICE, data.speechText);
+  twiml.pause({ length: 1 });
+  twiml.say(VOICE, getRandomSignOff());
+
+  const gather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}`, method: 'POST', timeout: 5 });
+  gather.say(VOICE, 'Press another number for a different airport, or hang up.');
+  twiml.hangup();
+  res.type('text/xml').send(twiml.toString());
+});
+
+// --- Health check ---
 app.get('/health', (req, res) => {
   const airports = {};
-  let anyStale = false;
-  const now = Date.now();
-
-  for (const airport of Object.values(AIRPORTS)) {
-    const cached = getCache(airport.icao);
-    if (cached) {
-      const updatedAt = cached.updatedAt || null;
-      const ageMs = updatedAt ? now - new Date(updatedAt).getTime() : null;
-      const stale = ageMs === null || ageMs > STALE_THRESHOLD_MS;
-      if (stale) anyStale = true;
-
-      airports[airport.icao] = {
-        status: stale ? 'stale' : 'available',
-        letter: cached.letter,
-        hasAudio: cached.hasAudio,
-        updatedAt,
-        ageSeconds: ageMs !== null ? Math.round(ageMs / 1000) : null,
-      };
+  let anyMissing = false;
+  for (const { icao, name } of AIRPORTS_LIST) {
+    const d = cache.get(icao);
+    if (d) {
+      airports[icao] = { status: 'available', letter: d.letter, updatedAt: d.updatedAt };
     } else {
-      anyStale = true;
-      airports[airport.icao] = {
-        status: 'unavailable',
-        letter: null,
-        hasAudio: false,
-        updatedAt: null,
-        ageSeconds: null,
-      };
+      airports[icao] = { status: 'unavailable' };
+      anyMissing = true;
     }
   }
-
-  const status = anyStale ? 'degraded' : 'ok';
-  res.status(anyStale ? 200 : 200).json({ status, airports });
+  res.json({ status: anyMissing ? 'degraded' : 'ok', airports });
 });
 
-// Stats endpoint - aggregate call analytics
-app.get('/stats', (req, res) => {
-  res.json(getStats());
-});
-
-// Twilio status callback - call completion data
-app.post('/call-status', express.json(), (req, res) => {
-  const { CallSid, From, CallDuration } = req.body;
-  logCall({
-    callSid: CallSid,
-    callerNumber: From,
-    airportSelected: null,
-    duration: CallDuration || null,
-  });
-  res.sendStatus(204);
-});
-
-// ----- ATIS Data Fetching -----
-
-async function fetchMetar(icao) {
-  try {
-    const url = `https://aviationweather.gov/api/data/metar?ids=${icao}&format=raw&hours=1`;
-    const res = await fetch(url);
-    const text = await res.text();
-    return text.trim() || null;
-  } catch (err) {
-    log.error(`METAR fetch failed for ${icao}:`, err.message);
-    return null;
-  }
-}
-
-async function fetchTaf(icao) {
-  try {
-    const url = `https://aviationweather.gov/api/data/taf?ids=${icao}&format=raw`;
-    const res = await fetch(url);
-    const text = await res.text();
-    return text.trim() || null;
-  } catch (err) {
-    log.error(`TAF fetch failed for ${icao}:`, err.message);
-    return null;
-  }
-}
-
-function formatMetarForSpeech(metar, airportName) {
-  if (!metar) return null;
-
-  // Basic METAR to speech conversion
-  let speech = metar
-    // Expand common abbreviations
+// --- ATIS refresh ---
+function formatForSpeech(raw, icao, name, letter) {
+  if (!raw) return null;
+  // The raw Aeroview text is already fairly readable - clean it up for Polly
+  let s = raw
     .replace(/\bKT\b/g, 'knots')
     .replace(/\bSM\b/g, 'statute miles')
-    .replace(/\bFEW/g, 'few clouds at ')
-    .replace(/\bSCT/g, 'scattered clouds at ')
-    .replace(/\bBKN/g, 'broken clouds at ')
-    .replace(/\bOVC/g, 'overcast at ')
-    .replace(/\bCLR\b/g, 'clear skies')
+    .replace(/\bFEW(\d{3})\b/g, (_, h) => `few clouds at ${parseInt(h) * 100} feet`)
+    .replace(/\bSCT(\d{3})\b/g, (_, h) => `scattered at ${parseInt(h) * 100} feet`)
+    .replace(/\bBKN(\d{3})\b/g, (_, h) => `ceiling broken at ${parseInt(h) * 100} feet`)
+    .replace(/\bOVC(\d{3})\b/g, (_, h) => `ceiling overcast at ${parseInt(h) * 100} feet`)
+    .replace(/\bCLR\b/g, 'sky clear')
     .replace(/\bSKC\b/g, 'sky clear')
-    .replace(/\bVRB/g, 'variable at ')
-    .replace(/\bBR\b/g, 'mist')
-    .replace(/\bFG\b/g, 'fog')
-    .replace(/\bRA\b/g, 'rain')
-    .replace(/\bSN\b/g, 'snow')
-    .replace(/\bTS\b/g, 'thunderstorm')
-    .replace(/\bSHRA\b/g, 'rain showers')
-    .replace(/\bDZ\b/g, 'drizzle')
-    .replace(/\b-RA\b/g, 'light rain')
-    .replace(/\b\+RA\b/g, 'heavy rain')
-    .replace(/\bP6SM\b/g, 'greater than 6 statute miles')
     .replace(/\bCAVOK\b/g, 'ceiling and visibility okay')
-    .replace(/\bNOSIG\b/g, 'no significant change')
-    .replace(/\bRMK\b/g, '. Remarks: ')
-    .replace(/\bA(\d{4})\b/g, 'altimeter $1')
-    // Read cloud heights - add "hundred feet"
-    .replace(/(\d{3})(?=\s)/g, (match) => {
-      const hundreds = parseInt(match);
-      return `${hundreds * 100} feet`;
-    })
-    // Space out wind direction/speed
-    .replace(/(\d{3})(\d{2,3})knots/g, '$1 degrees at $2 knots')
-    .replace(/G(\d+)/g, 'gusting $1');
+    .replace(/\bP6SM\b/g, 'greater than 6 statute miles')
+    .replace(/\bVRB\b/g, 'variable')
+    .replace(/\bRMK\b.*$/s, '') // strip remarks
+    .replace(/(\d{3})(\d{2,3})knots/g, (_, dir, spd) => `wind ${dir} degrees at ${spd} knots`)
+    .replace(/\bG(\d+)knots\b/g, 'gusting $1 knots')
+    .replace(/\bM(\d{2})\b/g, 'minus $1')
+    .trim();
 
-  return speech;
+  if (letter && !s.toLowerCase().includes('advise on initial contact')) {
+    s += `. Advise on initial contact you have information ${letter}.`;
+  }
+  return s;
 }
 
 async function refreshAtisData() {
-  log.info(`[${new Date().toISOString()}] Refreshing ATIS data...`);
+  console.log(`[${new Date().toISOString()}] Refreshing ATIS from Aeroview...`);
+  const results = await scrapeAll(ALL_ICAOS);
 
-  for (const [digit, airport] of Object.entries(AIRPORTS)) {
-    const metar = await fetchMetar(airport.icao);
-    if (metar) {
-      // Get ATIS letter (increments on data change)
-      const letter = getAtisLetter(airport.icao, metar);
-      // Format speech text using basic formatter (formatAtis requires parsed METAR)
-      const speech = formatMetarForSpeech(metar, airport.name);
-
-      let fullSpeech = `${airport.name} information ${letter}. ${speech}`;
-
-      // Fetch and append TAF for airports that have terminal forecasts
-      if (airport.hasTaf) {
-        const rawTaf = await fetchTaf(airport.icao);
-        if (rawTaf) {
-          const taf = parseTaf(rawTaf);
-          if (taf) {
-            const tafSpeech = formatTafSpeech(taf);
-            if (tafSpeech) {
-              fullSpeech += '\n' + tafSpeech;
-            }
-          }
-        }
-      }
-
-      // Update audio cache (regenerates audio only if text changed)
-      await updateCache(airport.icao, fullSpeech, letter);
-      log.info(`  ${airport.icao}: information ${letter}${airport.hasTaf ? ' (with forecast)' : ''}`);
+  for (const { icao, name } of AIRPORTS_LIST) {
+    const result = results.get(icao);
+    if (result && result.raw) {
+      const speechText = formatForSpeech(result.raw, icao, name, result.letter);
+      cache.set(icao, {
+        raw: result.raw,
+        letter: result.letter,
+        speechText,
+        updatedAt: new Date().toISOString(),
+      });
+      console.log(`  ${icao}: information ${result.letter || '?'}`);
     } else {
-      log.info(`  ${airport.icao}: no data`);
+      console.log(`  ${icao}: no data`);
     }
   }
 }
 
+// --- Start ---
 if (require.main === module) {
-  // Verify airports and start refresh cycle
-  verifyAirports(AIRPORTS).then(() => {
-    refreshAtisData();
-    setInterval(refreshAtisData, 5 * 60 * 1000);
-  });
+  refreshAtisData();
+  setInterval(refreshAtisData, 5 * 60 * 1000);
 
   app.listen(port, () => {
-    log.info(`ATIS Line server listening on port ${port}`);
-    log.info(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
+    console.log(`ATIS Line listening on port ${port}`);
+    console.log(`Regions: ${Object.entries(REGIONS).map(([d, r]) => `${d}=${r.region}`).join(', ')}`);
+    console.log(`Airports: ${ALL_ICAOS.join(', ')}`);
   });
 }
 
-module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, fetchTaf, formatMetarForSpeech, MAX_CALL_DURATION, STALE_THRESHOLD_MS };
+module.exports = { app, REGIONS, AIRPORTS_LIST, refreshAtisData, formatForSpeech };
