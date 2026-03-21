@@ -16,10 +16,13 @@ const AIRPORTS = {
   '5': { icao: 'CYVR', name: 'Vancouver International' },
 };
 
+// Shared logger (swap for a structured logger in production)
+const logger = console;
+
 // Data refresh service - fetches from NAV CANADA API every 5 minutes
 const refreshService = new RefreshService({
   formatForSpeech: formatMetarForSpeech,
-  logger: console,
+  logger,
 });
 
 // Twilio webhook - incoming call
@@ -153,8 +156,8 @@ function formatMetarForSpeech(metar) {
 if (require.main === module) {
   refreshService.start();
   app.listen(port, () => {
-    console.log(`ATIS Line server listening on port ${port}`);
-    console.log(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
+    logger.log(`ATIS Line server listening on port ${port}`);
+    logger.log(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
   });
 }
 
