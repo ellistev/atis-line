@@ -165,7 +165,7 @@ async function refreshAtisData() {
 // --- Start ---
 if (require.main === module) {
   refreshAtisData();
-  setInterval(refreshAtisData, 5 * 60 * 1000);
+  setInterval(refreshAtisData, 15 * 60 * 1000);
 
   app.listen(port, () => {
     console.log(`ATIS Line listening on port ${port}`);
