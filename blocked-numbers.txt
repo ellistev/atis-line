@@ -1,0 +1,3 @@
+# Blocked phone numbers - one per line
+# Format: +1XXXXXXXXXX (E.164 format)
+# Lines starting with # are comments

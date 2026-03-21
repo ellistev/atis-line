@@ -9,6 +9,7 @@ const { loadAirports, generateGreeting, verifyAirports } = require('./src/config
 const { parseTaf } = require('./src/data/taf-parser');
 const { formatTafSpeech } = require('./src/data/taf-formatter');
 const { logCall, getStats } = require('./src/analytics/call-logger');
+const { checkRateLimit, isBlocked, checkMonitoringAlerts } = require('./src/security/rate-limiter');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -22,10 +23,34 @@ app.use('/audio', express.static(AUDIO_DIR));
 // Airport configuration - loaded from airports.json
 const AIRPORTS = loadAirports();
 
+// Max call duration in seconds (3 minutes)
+const MAX_CALL_DURATION = 180;
+
 // Twilio webhook - incoming call
 app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
   const voice = getTwilioVoice();
+  const callerNumber = req.body.From;
+
+  // Check block list
+  if (isBlocked(callerNumber)) {
+    twiml.say(voice, 'This number has been blocked. Goodbye.');
+    twiml.hangup();
+    res.type('text/xml');
+    return res.send(twiml.toString());
+  }
+
+  // Check rate limit
+  const rateCheck = checkRateLimit(callerNumber);
+  if (!rateCheck.allowed) {
+    twiml.say(voice, 'You have exceeded the maximum number of calls. Please try again later. Goodbye.');
+    twiml.hangup();
+    res.type('text/xml');
+    return res.send(twiml.toString());
+  }
+
+  // Check monitoring alerts (non-blocking)
+  checkMonitoringAlerts();
 
   const gather = twiml.gather({
     numDigits: 1,
@@ -248,4 +273,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, fetchTaf, formatMetarForSpeech };
+module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, fetchTaf, formatMetarForSpeech, MAX_CALL_DURATION };
