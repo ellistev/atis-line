@@ -4,6 +4,7 @@ const twilio = require('twilio');
 const { getAtisLetter, formatAtis } = require('./src/speech/formatter');
 const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
 const { getTwilioVoice } = require('./src/audio/tts');
+const { loadAirports, generateGreeting, verifyAirports } = require('./src/config/airports');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -14,14 +15,8 @@ app.use(express.urlencoded({ extended: false }));
 // Serve cached audio files
 app.use('/audio', express.static(AUDIO_DIR));
 
-// Airport configuration
-const AIRPORTS = {
-  '1': { icao: 'CYPK', name: 'Pitt Meadows' },
-  '2': { icao: 'CZBB', name: 'Boundary Bay' },
-  '3': { icao: 'CYHC', name: 'Vancouver Harbour' },
-  '4': { icao: 'CYNJ', name: 'Langley' },
-  '5': { icao: 'CYVR', name: 'Vancouver International' },
-};
+// Airport configuration - loaded from airports.json
+const AIRPORTS = loadAirports();
 
 // Twilio webhook - incoming call
 app.post('/voice', (req, res) => {
@@ -35,16 +30,7 @@ app.post('/voice', (req, res) => {
     timeout: 10,
   });
 
-  gather.say(voice,
-    'Metro Vancouver aviation weather. ' +
-    'This is an unofficial automated service and is not affiliated with NAV CANADA. ' +
-    'Information is provided as a convenience only and should not be used as a sole source for flight planning. ' +
-    'Always verify conditions through official sources. ' +
-    'Press 1 for Pitt Meadows. ' +
-    'Press 2 for Boundary Bay. ' +
-    'Press 3 for Vancouver Harbour. ' +
-    'Press 4 for Langley. ' +
-    'Press 5 for Vancouver International.');
+  gather.say(voice, generateGreeting(AIRPORTS));
 
   // If no input, repeat
   twiml.redirect('/voice');
@@ -191,9 +177,11 @@ async function refreshAtisData() {
   }
 }
 
-// Refresh every 5 minutes
-refreshAtisData();
-setInterval(refreshAtisData, 5 * 60 * 1000);
+// Verify airports and start refresh cycle
+verifyAirports(AIRPORTS).then(() => {
+  refreshAtisData();
+  setInterval(refreshAtisData, 5 * 60 * 1000);
+});
 
 app.listen(port, () => {
   console.log(`ATIS Line server listening on port ${port}`);
