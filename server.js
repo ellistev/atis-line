@@ -126,18 +126,44 @@ app.post('/select-airport', async (req, res) => {
   res.send(twiml.toString());
 });
 
+// Staleness threshold in milliseconds (30 minutes)
+const STALE_THRESHOLD_MS = 30 * 60 * 1000;
+
 // Health check
 app.get('/health', (req, res) => {
   const airports = {};
+  let anyStale = false;
+  const now = Date.now();
+
   for (const airport of Object.values(AIRPORTS)) {
     const cached = getCache(airport.icao);
-    airports[airport.icao] = {
-      status: cached ? 'available' : 'unavailable',
-      letter: cached ? cached.letter : null,
-      hasAudio: cached ? cached.hasAudio : false,
-    };
+    if (cached) {
+      const updatedAt = cached.updatedAt || null;
+      const ageMs = updatedAt ? now - new Date(updatedAt).getTime() : null;
+      const stale = ageMs === null || ageMs > STALE_THRESHOLD_MS;
+      if (stale) anyStale = true;
+
+      airports[airport.icao] = {
+        status: stale ? 'stale' : 'available',
+        letter: cached.letter,
+        hasAudio: cached.hasAudio,
+        updatedAt,
+        ageSeconds: ageMs !== null ? Math.round(ageMs / 1000) : null,
+      };
+    } else {
+      anyStale = true;
+      airports[airport.icao] = {
+        status: 'unavailable',
+        letter: null,
+        hasAudio: false,
+        updatedAt: null,
+        ageSeconds: null,
+      };
+    }
   }
-  res.json({ status: 'ok', airports });
+
+  const status = anyStale ? 'degraded' : 'ok';
+  res.status(anyStale ? 200 : 200).json({ status, airports });
 });
 
 // Stats endpoint - aggregate call analytics
@@ -273,4 +299,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, fetchTaf, formatMetarForSpeech, MAX_CALL_DURATION };
+module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, fetchTaf, formatMetarForSpeech, MAX_CALL_DURATION, STALE_THRESHOLD_MS };
