@@ -1,3 +1,5 @@
+const logger = require('./logger');
+
 const callLog = [];
 
 function logCall({ callSid, callerNumber, airportIcao, airportName, timestamp } = {}) {
@@ -9,7 +11,7 @@ function logCall({ callSid, callerNumber, airportIcao, airportName, timestamp } 
     timestamp: timestamp || new Date().toISOString(),
   };
   callLog.push(entry);
-  console.log(`[CALL] ${entry.timestamp} from=${entry.callerNumber} airport=${entry.airportIcao || 'menu'}`);
+  logger.info(`[CALL] ${entry.timestamp} from=${entry.callerNumber} airport=${entry.airportIcao || 'menu'}`);
   return entry;
 }
 

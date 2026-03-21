@@ -3,6 +3,7 @@ const path = require('node:path');
 const { existsSync } = require('node:fs');
 const { mkdir } = require('node:fs/promises');
 const { generateAudio } = require('./tts');
+const logger = require('../logger');
 
 const AUDIO_DIR = path.join(__dirname, '..', '..', 'audio');
 
@@ -40,9 +41,9 @@ async function updateCache(icao, speechText, letter) {
 
   const hasAudio = await generateAudio(speechText, audioFile);
   if (hasAudio) {
-    console.log(`${icao} ATIS updated to information ${letter} (audio cached)`);
+    logger.info(`${icao} ATIS updated to information ${letter} (audio cached)`);
   } else {
-    console.log(`${icao} ATIS updated to information ${letter} (using live TTS)`);
+    logger.info(`${icao} ATIS updated to information ${letter} (using live TTS)`);
   }
 
   const entry = {

@@ -1,5 +1,6 @@
 const express = require('express');
 const twilio = require('twilio');
+const logger = require('./src/logger');
 
 const app = express();
 const port = 3338;
@@ -26,7 +27,7 @@ async function fetchMetar(icao) {
       return data.data[0].text;
     }
   } catch (err) {
-    console.error(`${icao}: ${err.message}`);
+    logger.error(`${icao}: ${err.message}`);
   }
   return null;
 }
@@ -73,7 +74,7 @@ function metarToSpeech(metar, name) {
 }
 
 async function refresh() {
-  console.log(`[${new Date().toLocaleTimeString()}] Refreshing...`);
+  logger.info(`[${new Date().toLocaleTimeString()}] Refreshing...`);
   for (const airport of Object.values(AIRPORTS)) {
     const metar = await fetchMetar(airport.icao);
     if (metar) {
@@ -82,9 +83,9 @@ async function refresh() {
         speech: metarToSpeech(metar, airport.name),
         time: new Date().toISOString(),
       });
-      console.log(`  ${airport.icao}: OK`);
+      logger.info(`  ${airport.icao}: OK`);
     } else {
-      console.log(`  ${airport.icao}: no data`);
+      logger.info(`  ${airport.icao}: no data`);
     }
   }
 }
@@ -141,9 +142,13 @@ app.get('/health', (req, res) => {
 });
 
 // Start
-refresh();
-setInterval(refresh, 5 * 60 * 1000);
+if (require.main === module) {
+  refresh();
+  setInterval(refresh, 5 * 60 * 1000);
 
-app.listen(port, () => {
-  console.log(`ATIS Line on port ${port}`);
-});
+  app.listen(port, () => {
+    logger.info(`ATIS Line on port ${port}`);
+  });
+}
+
+module.exports = { app, AIRPORTS, refresh, fetchMetar, metarToSpeech, cache };

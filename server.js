@@ -5,6 +5,7 @@ const { getAtisLetter, formatAtis } = require('./src/speech/formatter');
 const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
 const { getTwilioVoice } = require('./src/audio/tts');
 const { logCall } = require('./src/call-logger');
+const logger = require('./src/logger');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -147,7 +148,7 @@ async function fetchMetar(icao) {
     const text = await res.text();
     return text.trim() || null;
   } catch (err) {
-    console.error(`METAR fetch failed for ${icao}:`, err.message);
+    logger.error(`METAR fetch failed for ${icao}:`, err.message);
     return null;
   }
 }
@@ -194,7 +195,7 @@ function formatMetarForSpeech(metar, airportName) {
 }
 
 async function refreshAtisData() {
-  console.log(`[${new Date().toISOString()}] Refreshing ATIS data...`);
+  logger.info(`[${new Date().toISOString()}] Refreshing ATIS data...`);
 
   for (const [digit, airport] of Object.entries(AIRPORTS)) {
     const metar = await fetchMetar(airport.icao);
@@ -203,9 +204,9 @@ async function refreshAtisData() {
       const result = formatAtis({ icao: airport.icao, name: airport.name, rawMetar: metar });
       // Update audio cache (regenerates audio only if text changed)
       await updateCache(airport.icao, result.text, result.letter);
-      console.log(`  ${airport.icao}: information ${letter}`);
+      logger.info(`  ${airport.icao}: information ${result.letter}`);
     } else {
-      console.log(`  ${airport.icao}: no data`);
+      logger.info(`  ${airport.icao}: no data`);
     }
   }
 }
@@ -216,8 +217,8 @@ if (require.main === module) {
   setInterval(refreshAtisData, 5 * 60 * 1000);
 
   app.listen(port, () => {
-    console.log(`ATIS Line server listening on port ${port}`);
-    console.log(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
+    logger.info(`ATIS Line server listening on port ${port}`);
+    logger.info(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
   });
 }
 
