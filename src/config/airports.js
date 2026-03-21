@@ -49,11 +49,13 @@ function generateGreeting(airports) {
     .join(' ');
 
   return (
-    'Metro Vancouver aviation weather. ' +
-    'This is an unofficial automated service and is not affiliated with NAV CANADA. ' +
-    'Information is provided as a convenience only and should not be used as a sole source for flight planning. ' +
-    'Always verify conditions through official sources. ' +
-    menuItems
+    'Welcome to Lower Mainland aviation weather. The service NAV CANADA didn\'t love enough to keep. ' +
+    'We\'re not official, but we\'ve got you covered. ' +
+    'Quick heads up, this is an unofficial automated service and is not affiliated with NAV CANADA. ' +
+    'We pull from public data sources and do our best, but always verify with official sources before you fly. ' +
+    'Now, let\'s get you that weather. ' +
+    menuItems + ' ' +
+    'Press 9 for an aviation joke. Press 0 for about this service.'
   );
 }
 
