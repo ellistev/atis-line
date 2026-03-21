@@ -6,6 +6,7 @@ const { getAtisLetter, formatAtis } = require('./src/speech/formatter');
 const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
 const { getTwilioVoice } = require('./src/audio/tts');
 const { loadAirports, generateGreeting, verifyAirports } = require('./src/config/airports');
+const { getRandomSignOff, getRandomJoke, ABOUT_TEXT } = require('./src/personality');
 const { parseTaf } = require('./src/data/taf-parser');
 const { formatTafSpeech } = require('./src/data/taf-formatter');
 const { logCall, getStats } = require('./src/analytics/call-logger');
@@ -83,6 +84,24 @@ app.post('/select-airport', async (req, res) => {
     duration: req.body.CallDuration || null,
   });
 
+  // Easter egg: press 9 for aviation joke
+  if (digit === '9') {
+    twiml.say(voice, getRandomJoke());
+    twiml.pause({ length: 1 });
+    twiml.redirect('/voice');
+    res.type('text/xml');
+    return res.send(twiml.toString());
+  }
+
+  // Easter egg: press 0 for about this service
+  if (digit === '0') {
+    twiml.say(voice, ABOUT_TEXT);
+    twiml.pause({ length: 1 });
+    twiml.redirect('/voice');
+    res.type('text/xml');
+    return res.send(twiml.toString());
+  }
+
   if (!airport) {
     twiml.say(voice, 'Invalid selection.');
     twiml.redirect('/voice');
@@ -108,6 +127,9 @@ app.post('/select-airport', async (req, res) => {
   } else {
     twiml.say(voice, cached.speechText);
   }
+
+  // Sign-off with personality
+  twiml.say(voice, getRandomSignOff());
 
   // Option to hear another airport
   const gather = twiml.gather({
