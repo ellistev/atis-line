@@ -3,11 +3,10 @@ const { writeFile } = require('node:fs/promises');
 /**
  * TTS provider abstraction.
  *
- * Default: 'polly' — relies on Twilio <Say voice="Polly.Joanna"> at call time (FREE).
- *   No audio file is generated; the server falls back to <Say>.
- *
- * Optional: 'openai' — calls OpenAI TTS API to generate an MP3 file.
- *   Requires OPENAI_API_KEY env var. ~$0.015/1K chars, only on data change.
+ * 'polly'      - Twilio <Say voice="Polly.Joanna"> at call time. Free, government-robot voice.
+ * 'openai'     - OpenAI TTS nova voice. ~$0.015/1K chars. Requires OPENAI_API_KEY.
+ * 'elevenlabs' - ElevenLabs Rachel voice. Warm, human, realistic. Requires ELEVENLABS_API_KEY.
+ *                Only generates audio when ATIS letter changes - very cheap in practice.
  */
 
 const TTS_PROVIDER = process.env.TTS_PROVIDER || 'polly';
@@ -20,6 +19,9 @@ const TTS_PROVIDER = process.env.TTS_PROVIDER || 'polly';
  * @returns {Promise<boolean>} true if a file was generated, false if using <Say> fallback
  */
 async function generateAudio(text, outputPath) {
+  if (TTS_PROVIDER === 'elevenlabs') {
+    return generateElevenLabs(text, outputPath);
+  }
   if (TTS_PROVIDER === 'openai') {
     return generateOpenAI(text, outputPath);
   }
@@ -69,7 +71,54 @@ async function generateOpenAI(text, outputPath) {
 }
 
 /**
+ * Generate audio via ElevenLabs TTS API.
+ * Uses Rachel voice (21m00Tcm4TlvDq8ikWAM) - warm, professional, human-sounding.
+ */
+async function generateElevenLabs(text, outputPath) {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  const voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
+  if (!apiKey) {
+    console.error('ELEVENLABS_API_KEY not set, falling back to Polly');
+    return false;
+  }
+
+  try {
+    const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        text,
+        model_id: 'eleven_turbo_v2',
+        voice_settings: {
+          stability: 0.75,
+          similarity_boost: 0.75,
+          style: 0.0,
+          use_speaker_boost: true,
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error(`ElevenLabs TTS error: ${res.status} ${err}`);
+      return false;
+    }
+
+    const buffer = Buffer.from(await res.arrayBuffer());
+    await writeFile(outputPath, buffer);
+    return true;
+  } catch (err) {
+    console.error(`ElevenLabs TTS failed: ${err.message}`);
+    return false;
+  }
+}
+
+/**
  * Get the TTS voice config for Twilio <Say> fallback.
+ * Polly.Joanna = that classic government ATIS robot voice. Intentional.
  */
 function getTwilioVoice() {
   return { voice: 'Polly.Joanna', language: 'en-US' };
