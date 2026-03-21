@@ -1,5 +1,6 @@
 const express = require('express');
 const twilio = require('twilio');
+const { RefreshService } = require('./src/data/refresh-service');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -15,8 +16,10 @@ const AIRPORTS = {
   '5': { icao: 'CYVR', name: 'Vancouver International' },
 };
 
-// ATIS data cache - refreshed every 5 minutes
-const atisCache = new Map();
+// Data refresh service - fetches from NAV CANADA API every 5 minutes
+const refreshService = new RefreshService({
+  formatForSpeech: formatMetarForSpeech,
+});
 
 // Twilio webhook - incoming call
 app.post('/voice', (req, res) => {
@@ -63,7 +66,7 @@ app.post('/select-airport', async (req, res) => {
   }
   
   // Get cached ATIS data
-  const atis = atisCache.get(airport.icao);
+  const atis = refreshService.getSpeech(airport.icao);
   
   if (!atis) {
     twiml.say({ voice: 'Polly.Joanna' }, 
@@ -97,28 +100,16 @@ app.post('/select-airport', async (req, res) => {
 // Health check
 app.get('/health', (req, res) => {
   const cached = Object.fromEntries(
-    [...atisCache.entries()].map(([k, v]) => [k, v ? 'available' : 'unavailable'])
+    [...refreshService.cache.entries()].map(([k, v]) => [k, v ? 'available' : 'unavailable'])
   );
   res.json({ status: 'ok', airports: cached });
 });
 
-// ----- ATIS Data Fetching -----
+// ----- ATIS Data -----
 
-async function fetchMetar(icao) {
-  try {
-    const url = `https://aviationweather.gov/api/data/metar?ids=${icao}&format=raw&hours=1`;
-    const res = await fetch(url);
-    const text = await res.text();
-    return text.trim() || null;
-  } catch (err) {
-    console.error(`METAR fetch failed for ${icao}:`, err.message);
-    return null;
-  }
-}
-
-function formatMetarForSpeech(metar, airportName) {
+function formatMetarForSpeech(metar) {
   if (!metar) return null;
-  
+
   // Basic METAR to speech conversion
   let speech = metar
     // Expand common abbreviations
@@ -153,28 +144,12 @@ function formatMetarForSpeech(metar, airportName) {
     // Space out wind direction/speed
     .replace(/(\d{3})(\d{2,3})knots/g, '$1 degrees at $2 knots')
     .replace(/G(\d+)/g, 'gusting $1');
-  
+
   return speech;
 }
 
-async function refreshAtisData() {
-  console.log(`[${new Date().toISOString()}] Refreshing ATIS data...`);
-  
-  for (const [digit, airport] of Object.entries(AIRPORTS)) {
-    const metar = await fetchMetar(airport.icao);
-    if (metar) {
-      const speech = formatMetarForSpeech(metar, airport.name);
-      atisCache.set(airport.icao, speech);
-      console.log(`  ${airport.icao}: updated`);
-    } else {
-      console.log(`  ${airport.icao}: no data`);
-    }
-  }
-}
-
-// Refresh every 5 minutes
-refreshAtisData();
-setInterval(refreshAtisData, 5 * 60 * 1000);
+// Start data refresh from NAV CANADA API
+refreshService.start();
 
 app.listen(port, () => {
   console.log(`ATIS Line server listening on port ${port}`);
