@@ -19,11 +19,12 @@ const ALL_ICAOS = AIRPORTS_LIST.map(a => a.icao);
 const cache = new Map();
 
 const VOICE = { voice: 'Polly.Joanna', language: 'en-US' };
+const VOICE_SLOW = { voice: 'Polly.Joanna', language: 'en-US', rate: '85%' };
 
 // --- IVR: top-level menu ---
 app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
-  const gather = twiml.gather({ numDigits: 1, action: '/select-region', method: 'POST', timeout: 10 });
+  const gather = twiml.gather({ numDigits: 1, action: '/select-region', method: 'POST', timeout: 10, finishOnKey: '#' });
   gather.say(VOICE, generateTopGreeting(REGIONS));
   twiml.redirect('/voice');
   res.type('text/xml').send(twiml.toString());
@@ -33,6 +34,12 @@ app.post('/voice', (req, res) => {
 app.post('/select-region', (req, res) => {
   const digit = req.body.Digits;
   const twiml = new twilio.twiml.VoiceResponse();
+
+  // # = back to top
+  if (!digit || digit === '#') {
+    twiml.redirect('/voice');
+    return res.type('text/xml').send(twiml.toString());
+  }
 
   // Easter eggs at top level
   if (digit === '9') {
@@ -55,7 +62,7 @@ app.post('/select-region', (req, res) => {
     return res.type('text/xml').send(twiml.toString());
   }
 
-  const gather = twiml.gather({ numDigits: 1, action: `/select-airport/${digit}`, method: 'POST', timeout: 10 });
+  const gather = twiml.gather({ numDigits: 1, action: `/select-airport/${digit}`, method: 'POST', timeout: 10, finishOnKey: '#' });
   gather.say(VOICE, generateRegionGreeting(region));
   twiml.redirect('/voice');
   res.type('text/xml').send(twiml.toString());
@@ -67,6 +74,12 @@ app.post('/select-airport/:regionDigit', (req, res) => {
   const digit = req.body.Digits;
   const twiml = new twilio.twiml.VoiceResponse();
 
+  // # = back to region menu
+  if (!digit || digit === '#') {
+    twiml.redirect(`/region-menu/${regionDigit}`);
+    return res.type('text/xml').send(twiml.toString());
+  }
+
   const region = REGIONS[regionDigit];
   if (!region) {
     twiml.redirect('/voice');
@@ -76,7 +89,7 @@ app.post('/select-airport/:regionDigit', (req, res) => {
   const airport = region.airports.find(a => a.digit === digit);
   if (!airport) {
     twiml.say(VOICE, 'Invalid selection.');
-    twiml.redirect(`/select-region`);
+    twiml.redirect(`/region-menu/${regionDigit}`);
     return res.type('text/xml').send(twiml.toString());
   }
 
@@ -87,13 +100,29 @@ app.post('/select-airport/:regionDigit', (req, res) => {
     return res.type('text/xml').send(twiml.toString());
   }
 
-  twiml.say(VOICE, data.speechText);
+  twiml.say(VOICE_SLOW, data.speechText);
   twiml.pause({ length: 1 });
   twiml.say(VOICE, getRandomSignOff());
 
-  const gather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}`, method: 'POST', timeout: 5 });
-  gather.say(VOICE, 'Press another number for a different airport, or hang up.');
+  // # goes back to region menu, digit goes to another airport
+  const gather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}`, method: 'POST', timeout: 5, finishOnKey: '#' });
+  gather.say(VOICE, 'Press another number for a different airport, pound to go back, or hang up.');
   twiml.hangup();
+  res.type('text/xml').send(twiml.toString());
+});
+
+// --- Re-entry: go back to region menu (e.g. after pressing #) ---
+app.post('/region-menu/:regionDigit', (req, res) => {
+  const { regionDigit } = req.params;
+  const region = REGIONS[regionDigit];
+  const twiml = new twilio.twiml.VoiceResponse();
+  if (!region) {
+    twiml.redirect('/voice');
+    return res.type('text/xml').send(twiml.toString());
+  }
+  const gather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}`, method: 'POST', timeout: 10, finishOnKey: '#' });
+  gather.say(VOICE, generateRegionGreeting(region));
+  twiml.redirect('/voice');
   res.type('text/xml').send(twiml.toString());
 });
 
