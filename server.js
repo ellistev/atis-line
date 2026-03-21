@@ -4,6 +4,7 @@ const twilio = require('twilio');
 const { getAtisLetter, formatAtis } = require('./src/speech/formatter');
 const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
 const { getTwilioVoice } = require('./src/audio/tts');
+const { logCall } = require('./src/call-logger');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -25,6 +26,12 @@ const AIRPORTS = {
 
 // Twilio webhook - incoming call
 app.post('/voice', (req, res) => {
+  logCall({
+    callSid: req.body.CallSid,
+    callerNumber: req.body.From,
+    timestamp: new Date().toISOString(),
+  });
+
   const twiml = new twilio.twiml.VoiceResponse();
   const voice = getTwilioVoice();
 
@@ -67,6 +74,15 @@ app.post('/select-airport', async (req, res) => {
     return res.send(twiml.toString());
   }
 
+  // Log airport selection
+  logCall({
+    callSid: req.body.CallSid,
+    callerNumber: req.body.From,
+    airportIcao: airport.icao,
+    airportName: airport.name,
+    timestamp: new Date().toISOString(),
+  });
+
   // Get cached ATIS data
   const cached = getCache(airport.icao);
 
@@ -76,6 +92,11 @@ app.post('/select-airport', async (req, res) => {
     twiml.redirect('/voice');
     res.type('text/xml');
     return res.send(twiml.toString());
+  }
+
+  // Warn if data may be stale (cache older than 15 minutes)
+  if (cached.updatedAt && (Date.now() - cached.updatedAt > 15 * 60 * 1000)) {
+    twiml.say(voice, 'Note: this information may be outdated.');
   }
 
   // Play cached audio if available, otherwise use live TTS
@@ -178,12 +199,10 @@ async function refreshAtisData() {
   for (const [digit, airport] of Object.entries(AIRPORTS)) {
     const metar = await fetchMetar(airport.icao);
     if (metar) {
-      // Get ATIS letter (increments on data change)
-      const letter = getAtisLetter(airport.icao, metar);
-      // Format speech text using basic formatter (formatAtis requires parsed METAR)
-      const speech = formatMetarForSpeech(metar, airport.name);
+      // Use the proper formatter which handles LWIS and standard METAR
+      const result = formatAtis({ icao: airport.icao, name: airport.name, rawMetar: metar });
       // Update audio cache (regenerates audio only if text changed)
-      await updateCache(airport.icao, `${airport.name} information ${letter}. ${speech}`, letter);
+      await updateCache(airport.icao, result.text, result.letter);
       console.log(`  ${airport.icao}: information ${letter}`);
     } else {
       console.log(`  ${airport.icao}: no data`);
@@ -191,13 +210,15 @@ async function refreshAtisData() {
   }
 }
 
-// Refresh every 5 minutes
-refreshAtisData();
-setInterval(refreshAtisData, 5 * 60 * 1000);
+// Only start server and data refresh when run directly (not when imported for tests)
+if (require.main === module) {
+  refreshAtisData();
+  setInterval(refreshAtisData, 5 * 60 * 1000);
 
-app.listen(port, () => {
-  console.log(`ATIS Line server listening on port ${port}`);
-  console.log(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
-});
+  app.listen(port, () => {
+    console.log(`ATIS Line server listening on port ${port}`);
+    console.log(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
+  });
+}
 
-module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, formatMetarForSpeech };
+module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, formatMetarForSpeech, logCall };

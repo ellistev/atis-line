@@ -51,6 +51,7 @@ async function updateCache(icao, speechText, letter) {
     audioFile,
     hasAudio,
     letter,
+    updatedAt: Date.now(),
   };
   cache.set(icao, entry);
   return entry;
