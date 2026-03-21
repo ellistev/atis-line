@@ -78,9 +78,10 @@ function getCache(icao) {
  */
 function getAudioUrl(icao, baseUrl) {
   const entry = cache.get(icao);
-  if (!entry || !entry.hasAudio) return null;
-  // Verify file still exists
-  if (!existsSync(entry.audioFile)) return null;
+  const audioFile = path.join(AUDIO_DIR, `${icao}.mp3`);
+  // Check in-memory flag OR fall back to disk check (survives restarts)
+  const hasAudio = (entry && entry.hasAudio) || existsSync(audioFile);
+  if (!hasAudio) return null;
   return `${baseUrl}/audio/${icao}.mp3`;
 }
 

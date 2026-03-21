@@ -9,7 +9,7 @@ const { writeFile } = require('node:fs/promises');
  *                Only generates audio when ATIS letter changes - very cheap in practice.
  */
 
-const TTS_PROVIDER = process.env.TTS_PROVIDER || 'polly';
+const TTS_PROVIDER = process.env.TTS_PROVIDER || 'elevenlabs';
 
 /**
  * Generate an audio file from text using the configured TTS provider.
@@ -76,7 +76,8 @@ async function generateOpenAI(text, outputPath) {
  */
 async function generateElevenLabs(text, outputPath) {
   const apiKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID || '21m00Tcm4TlvDq8ikWAM';
+  // Sarah - Mature, Reassuring, Confident - perfect ATIS voice
+  const voiceId = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL';
   if (!apiKey) {
     console.error('ELEVENLABS_API_KEY not set, falling back to Polly');
     return false;
@@ -104,7 +105,9 @@ async function generateElevenLabs(text, outputPath) {
     if (!res.ok) {
       const err = await res.text();
       console.error(`ElevenLabs TTS error: ${res.status} ${err}`);
-      return false;
+      // Quota exceeded or any error - fall back to OpenAI
+      console.log('Falling back to OpenAI TTS...');
+      return generateOpenAI(text, outputPath);
     }
 
     const buffer = Buffer.from(await res.arrayBuffer());
@@ -112,7 +115,8 @@ async function generateElevenLabs(text, outputPath) {
     return true;
   } catch (err) {
     console.error(`ElevenLabs TTS failed: ${err.message}`);
-    return false;
+    console.log('Falling back to OpenAI TTS...');
+    return generateOpenAI(text, outputPath);
   }
 }
 

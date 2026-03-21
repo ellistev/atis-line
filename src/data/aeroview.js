@@ -1,15 +1,41 @@
 /**
  * NAV CANADA Aeroview scraper
  * Scrapes D-ATIS from https://spaces.navcanada.ca/workspace/aeroview/{ICAO}
- * Uses headless Playwright - works standalone on any server with Chromium installed.
+ *
+ * Two modes:
+ *  - CDP mode (default on Windows dev): connects to OpenClaw's managed Chrome
+ *    at CDP_URL (127.0.0.1:18792) which holds NAV CANADA session cookies.
+ *  - Headless mode (production/Linux): launches its own Chromium. Aeroview
+ *    shows weather data to unauthenticated users - login only needed for some
+ *    features, not the ATIS block itself.
+ *
+ * Set CDP_URL=disabled to force headless mode even on Windows.
  */
 
 const { chromium } = require('playwright');
 
+const CDP_URL = process.env.CDP_URL || 'http://127.0.0.1:18792';
+const USE_CDP = CDP_URL !== 'disabled';
 let _browser = null;
 
 async function getBrowser() {
-  if (_browser && _browser.isConnected()) return _browser;
+  if (_browser) {
+    try {
+      if (_browser.isConnected()) return _browser;
+    } catch {
+      // fall through to reconnect
+    }
+    _browser = null;
+  }
+  if (USE_CDP) {
+    try {
+      _browser = await chromium.connectOverCDP(CDP_URL);
+      return _browser;
+    } catch (err) {
+      console.warn(`[Aeroview] CDP connect failed (${err.message}), falling back to headless`);
+    }
+  }
+  // Headless fallback - works on Linux servers
   _browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
   return _browser;
 }
@@ -20,7 +46,9 @@ async function getBrowser() {
  */
 async function scrapeAeroview(icao) {
   const browser = await getBrowser();
-  const page = await browser.newPage();
+  // connectOverCDP uses existing contexts - open a fresh page in the first context
+  const context = browser.contexts()[0] || await browser.newContext();
+  const page = await context.newPage();
   try {
     await page.goto(`https://spaces.navcanada.ca/workspace/aeroview/${icao}`, {
       waitUntil: 'domcontentloaded',

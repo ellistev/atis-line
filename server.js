@@ -1,9 +1,11 @@
+require('dotenv').config();
 const express = require('express');
 const twilio = require('twilio');
 const { loadAirports, getRegions, generateTopGreeting, generateRegionGreeting } = require('./src/config/airports');
 const { scrapeAll } = require('./src/data/aeroview');
 const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
 const { getRandomSignOff, getRandomJoke, ABOUT_TEXT } = require('./src/personality');
+const { humanizeAtis } = require('./src/speech/humanize');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -96,25 +98,26 @@ app.post('/select-airport/:regionDigit', (req, res) => {
   }
 
   const cached = getCache(airport.icao);
-  if (!cached) {
+  
+  // Check if we have a pre-generated MP3 on disk (survives restarts before first scrape)
+  const audioUrl = getAudioUrl(airport.icao, BASE_URL);
+  
+  if (!cached && !audioUrl) {
     twiml.say(VOICE, `${airport.name} ATIS is currently unavailable. Please try again shortly.`);
     twiml.redirect('/voice');
     return res.type('text/xml').send(twiml.toString());
   }
 
-  // Play pre-generated audio if available, otherwise fall back to Polly
-  const audioUrl = getAudioUrl(airport.icao, BASE_URL);
+  // Wrap everything in a Gather so # or digit works during playback
+  const playGather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}`, method: 'POST', timeout: 8, finishOnKey: '#' });
   if (audioUrl) {
-    twiml.play(audioUrl);
+    playGather.play(`${audioUrl}?t=${Date.now()}`);
   } else {
-    twiml.say(VOICE_SLOW, cached.speechText);
+    playGather.say(VOICE_SLOW, cached.speechText);
   }
-  twiml.pause({ length: 1 });
-  twiml.say(VOICE, getRandomSignOff());
-
-  // # goes back to region menu, digit goes to another airport
-  const gather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}`, method: 'POST', timeout: 5, finishOnKey: '#' });
-  gather.say(VOICE, 'Press another number for a different airport, pound to go back, or hang up.');
+  playGather.pause({ length: 1 });
+  playGather.say(VOICE, getRandomSignOff());
+  playGather.say(VOICE, 'Press another number for a different airport, or pound to go back to the region menu.');
   twiml.hangup();
   res.type('text/xml').send(twiml.toString());
 });
@@ -148,6 +151,12 @@ app.get('/health', (req, res) => {
     }
   }
   res.json({ status: anyMissing ? 'degraded' : 'ok', airports });
+});
+
+// --- Manual refresh trigger ---
+app.post('/refresh', async (req, res) => {
+  res.json({ ok: true, message: 'Refresh triggered' });
+  refreshAtisData();
 });
 
 // --- ATIS refresh ---
@@ -185,7 +194,7 @@ async function refreshAtisData() {
   for (const { icao, name } of AIRPORTS_LIST) {
     const result = results.get(icao);
     if (result && result.raw) {
-      const speechText = formatForSpeech(result.raw, icao, name, result.letter);
+      const speechText = await humanizeAtis(result.raw, name);
       await updateCache(icao, speechText, result.letter);
       console.log(`  ${icao}: information ${result.letter || '?'}`);
     } else {
@@ -207,3 +216,4 @@ if (require.main === module) {
 }
 
 module.exports = { app, REGIONS, AIRPORTS_LIST, refreshAtisData, formatForSpeech };
+

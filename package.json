@@ -9,8 +9,9 @@
     "test": "node --test test/**/*.test.js"
   },
   "dependencies": {
+    "dotenv": "^17.3.1",
     "express": "^4.21.0",
-    "twilio": "^5.0.0",
-    "playwright": "^1.50.0"
+    "playwright": "^1.50.0",
+    "twilio": "^5.0.0"
   }
 }
