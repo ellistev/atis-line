@@ -1,10 +1,13 @@
 const express = require('express');
 const path = require('node:path');
 const twilio = require('twilio');
+const log = require('./src/logger');
 const { getAtisLetter, formatAtis } = require('./src/speech/formatter');
 const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
 const { getTwilioVoice } = require('./src/audio/tts');
 const { loadAirports, generateGreeting, verifyAirports } = require('./src/config/airports');
+const { parseTaf } = require('./src/data/taf-parser');
+const { formatTafSpeech } = require('./src/data/taf-formatter');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -112,7 +115,19 @@ async function fetchMetar(icao) {
     const text = await res.text();
     return text.trim() || null;
   } catch (err) {
-    console.error(`METAR fetch failed for ${icao}:`, err.message);
+    log.error(`METAR fetch failed for ${icao}:`, err.message);
+    return null;
+  }
+}
+
+async function fetchTaf(icao) {
+  try {
+    const url = `https://aviationweather.gov/api/data/taf?ids=${icao}&format=raw`;
+    const res = await fetch(url);
+    const text = await res.text();
+    return text.trim() || null;
+  } catch (err) {
+    log.error(`TAF fetch failed for ${icao}:`, err.message);
     return null;
   }
 }
@@ -159,7 +174,7 @@ function formatMetarForSpeech(metar, airportName) {
 }
 
 async function refreshAtisData() {
-  console.log(`[${new Date().toISOString()}] Refreshing ATIS data...`);
+  log.info(`[${new Date().toISOString()}] Refreshing ATIS data...`);
 
   for (const [digit, airport] of Object.entries(AIRPORTS)) {
     const metar = await fetchMetar(airport.icao);
@@ -168,24 +183,43 @@ async function refreshAtisData() {
       const letter = getAtisLetter(airport.icao, metar);
       // Format speech text using basic formatter (formatAtis requires parsed METAR)
       const speech = formatMetarForSpeech(metar, airport.name);
+
+      let fullSpeech = `${airport.name} information ${letter}. ${speech}`;
+
+      // Fetch and append TAF for airports that have terminal forecasts
+      if (airport.hasTaf) {
+        const rawTaf = await fetchTaf(airport.icao);
+        if (rawTaf) {
+          const taf = parseTaf(rawTaf);
+          if (taf) {
+            const tafSpeech = formatTafSpeech(taf);
+            if (tafSpeech) {
+              fullSpeech += '\n' + tafSpeech;
+            }
+          }
+        }
+      }
+
       // Update audio cache (regenerates audio only if text changed)
-      await updateCache(airport.icao, `${airport.name} information ${letter}. ${speech}`, letter);
-      console.log(`  ${airport.icao}: information ${letter}`);
+      await updateCache(airport.icao, fullSpeech, letter);
+      log.info(`  ${airport.icao}: information ${letter}${airport.hasTaf ? ' (with forecast)' : ''}`);
     } else {
-      console.log(`  ${airport.icao}: no data`);
+      log.info(`  ${airport.icao}: no data`);
     }
   }
 }
 
-// Verify airports and start refresh cycle
-verifyAirports(AIRPORTS).then(() => {
-  refreshAtisData();
-  setInterval(refreshAtisData, 5 * 60 * 1000);
-});
+if (require.main === module) {
+  // Verify airports and start refresh cycle
+  verifyAirports(AIRPORTS).then(() => {
+    refreshAtisData();
+    setInterval(refreshAtisData, 5 * 60 * 1000);
+  });
 
-app.listen(port, () => {
-  console.log(`ATIS Line server listening on port ${port}`);
-  console.log(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
-});
+  app.listen(port, () => {
+    log.info(`ATIS Line server listening on port ${port}`);
+    log.info(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
+  });
+}
 
-module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, formatMetarForSpeech };
+module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, fetchTaf, formatMetarForSpeech };
