@@ -5,6 +5,8 @@ const { getAtisLetter, formatAtis } = require('./src/speech/formatter');
 const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
 const { getTwilioVoice } = require('./src/audio/tts');
 const { loadAirports, generateGreeting, verifyAirports } = require('./src/config/airports');
+const { parseTaf } = require('./src/data/taf-parser');
+const { formatTafSpeech } = require('./src/data/taf-formatter');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -117,6 +119,18 @@ async function fetchMetar(icao) {
   }
 }
 
+async function fetchTaf(icao) {
+  try {
+    const url = `https://aviationweather.gov/api/data/taf?ids=${icao}&format=raw`;
+    const res = await fetch(url);
+    const text = await res.text();
+    return text.trim() || null;
+  } catch (err) {
+    console.error(`TAF fetch failed for ${icao}:`, err.message);
+    return null;
+  }
+}
+
 function formatMetarForSpeech(metar, airportName) {
   if (!metar) return null;
 
@@ -168,9 +182,26 @@ async function refreshAtisData() {
       const letter = getAtisLetter(airport.icao, metar);
       // Format speech text using basic formatter (formatAtis requires parsed METAR)
       const speech = formatMetarForSpeech(metar, airport.name);
+
+      let fullSpeech = `${airport.name} information ${letter}. ${speech}`;
+
+      // Fetch and append TAF for airports that have terminal forecasts
+      if (airport.hasTaf) {
+        const rawTaf = await fetchTaf(airport.icao);
+        if (rawTaf) {
+          const taf = parseTaf(rawTaf);
+          if (taf) {
+            const tafSpeech = formatTafSpeech(taf);
+            if (tafSpeech) {
+              fullSpeech += '\n' + tafSpeech;
+            }
+          }
+        }
+      }
+
       // Update audio cache (regenerates audio only if text changed)
-      await updateCache(airport.icao, `${airport.name} information ${letter}. ${speech}`, letter);
-      console.log(`  ${airport.icao}: information ${letter}`);
+      await updateCache(airport.icao, fullSpeech, letter);
+      console.log(`  ${airport.icao}: information ${letter}${airport.hasTaf ? ' (with forecast)' : ''}`);
     } else {
       console.log(`  ${airport.icao}: no data`);
     }
@@ -188,4 +219,4 @@ app.listen(port, () => {
   console.log(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
 });
 
-module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, formatMetarForSpeech };
+module.exports = { app, AIRPORTS, refreshAtisData, fetchMetar, fetchTaf, formatMetarForSpeech };
