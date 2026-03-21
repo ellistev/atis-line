@@ -4,11 +4,14 @@ const { parseMetar } = require('./metar-parser');
 const DEFAULT_AIRPORTS = ['CYPK', 'CZBB', 'CYHC', 'CYNJ', 'CYVR'];
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
+const nullLogger = { log() {}, error() {} };
+
 class RefreshService {
-  constructor({ client, airports, formatForSpeech } = {}) {
+  constructor({ client, airports, formatForSpeech, logger } = {}) {
     this._client = client || new NavCanadaClient();
     this._airports = airports || DEFAULT_AIRPORTS;
     this._formatForSpeech = formatForSpeech || null;
+    this._logger = logger || nullLogger;
     this._cache = new Map(); // icao -> { metar, taf, parsed, speech, timestamp, lastChanged }
     this._timer = null;
   }
@@ -59,7 +62,7 @@ class RefreshService {
           results.unchanged.push(icao);
         }
       } catch (err) {
-        console.error(`Refresh failed for ${icao}:`, err.message);
+        this._logger.error(`Refresh failed for ${icao}:`, err.message);
         results.failed.push(icao);
       }
     });
@@ -69,12 +72,12 @@ class RefreshService {
   }
 
   async start() {
-    console.log(`[${new Date().toISOString()}] Refreshing ATIS data...`);
+    this._logger.log(`[${new Date().toISOString()}] Refreshing ATIS data...`);
     const results = await this.refresh();
     this._logResults(results);
 
     this._timer = setInterval(async () => {
-      console.log(`[${new Date().toISOString()}] Refreshing ATIS data...`);
+      this._logger.log(`[${new Date().toISOString()}] Refreshing ATIS data...`);
       const r = await this.refresh();
       this._logResults(r);
     }, REFRESH_INTERVAL_MS);
@@ -88,9 +91,9 @@ class RefreshService {
   }
 
   _logResults(results) {
-    for (const icao of results.updated) console.log(`  ${icao}: updated`);
-    for (const icao of results.unchanged) console.log(`  ${icao}: unchanged`);
-    for (const icao of results.failed) console.log(`  ${icao}: fetch failed`);
+    for (const icao of results.updated) this._logger.log(`  ${icao}: updated`);
+    for (const icao of results.unchanged) this._logger.log(`  ${icao}: unchanged`);
+    for (const icao of results.failed) this._logger.log(`  ${icao}: fetch failed`);
   }
 }
 

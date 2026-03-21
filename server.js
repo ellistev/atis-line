@@ -19,6 +19,7 @@ const AIRPORTS = {
 // Data refresh service - fetches from NAV CANADA API every 5 minutes
 const refreshService = new RefreshService({
   formatForSpeech: formatMetarForSpeech,
+  logger: console,
 });
 
 // Twilio webhook - incoming call
@@ -148,10 +149,13 @@ function formatMetarForSpeech(metar) {
   return speech;
 }
 
-// Start data refresh from NAV CANADA API
-refreshService.start();
+// Start data refresh from NAV CANADA API and listen when run directly
+if (require.main === module) {
+  refreshService.start();
+  app.listen(port, () => {
+    console.log(`ATIS Line server listening on port ${port}`);
+    console.log(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
+  });
+}
 
-app.listen(port, () => {
-  console.log(`ATIS Line server listening on port ${port}`);
-  console.log(`Airports: ${Object.values(AIRPORTS).map(a => a.icao).join(', ')}`);
-});
+module.exports = { app, refreshService, formatMetarForSpeech, AIRPORTS };
