@@ -8,6 +8,7 @@ const { getTwilioVoice } = require('./src/audio/tts');
 const { loadAirports, generateGreeting, verifyAirports } = require('./src/config/airports');
 const { parseTaf } = require('./src/data/taf-parser');
 const { formatTafSpeech } = require('./src/data/taf-formatter');
+const { logCall, getStats } = require('./src/analytics/call-logger');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -48,6 +49,14 @@ app.post('/select-airport', async (req, res) => {
   const airport = AIRPORTS[digit];
   const twiml = new twilio.twiml.VoiceResponse();
   const voice = getTwilioVoice();
+
+  // Log every call attempt
+  logCall({
+    callSid: req.body.CallSid,
+    callerNumber: req.body.From,
+    airportSelected: airport ? airport.icao : null,
+    duration: req.body.CallDuration || null,
+  });
 
   if (!airport) {
     twiml.say(voice, 'Invalid selection.');
@@ -104,6 +113,23 @@ app.get('/health', (req, res) => {
     };
   }
   res.json({ status: 'ok', airports });
+});
+
+// Stats endpoint - aggregate call analytics
+app.get('/stats', (req, res) => {
+  res.json(getStats());
+});
+
+// Twilio status callback - call completion data
+app.post('/call-status', express.json(), (req, res) => {
+  const { CallSid, From, CallDuration } = req.body;
+  logCall({
+    callSid: CallSid,
+    callerNumber: From,
+    airportSelected: null,
+    duration: CallDuration || null,
+  });
+  res.sendStatus(204);
 });
 
 // ----- ATIS Data Fetching -----
