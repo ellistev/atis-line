@@ -250,10 +250,18 @@ async function refreshAtisData() {
   for (const { icao, name } of AIRPORTS_LIST) {
     const result = results.get(icao);
     if (result && result.raw) {
-      const speechText = await humanizeAtis(result.raw, name);
-      await updateCache(icao, speechText, result.letter);
-      recordSuccess(icao);
-      console.log(`  ${icao}: information ${result.letter || '?'}`);
+      const cached = getCache(icao);
+      if (cached && cached.letter && cached.letter === result.letter) {
+        // ATIS letter unchanged — skip humanizer and TTS to save quota
+        cached.updatedAt = new Date().toISOString();
+        recordSuccess(icao);
+        console.log(`  ${icao}: information ${result.letter} (unchanged, skipping TTS)`);
+      } else {
+        const speechText = await humanizeAtis(result.raw, name);
+        await updateCache(icao, speechText, result.letter);
+        recordSuccess(icao);
+        console.log(`  ${icao}: information ${result.letter || '?'}`);
+      }
     } else {
       recordFailure(icao, 'No data returned from scraper');
       console.log(`  ${icao}: no data`);
