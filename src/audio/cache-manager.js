@@ -78,10 +78,15 @@ function getCache(icao) {
  */
 function getAudioUrl(icao, baseUrl) {
   const entry = cache.get(icao);
-  const audioFile = path.join(AUDIO_DIR, `${icao}.mp3`);
-  // Check in-memory flag OR fall back to disk check (survives restarts)
-  const hasAudio = (entry && entry.hasAudio) || existsSync(audioFile);
-  if (!hasAudio) return null;
+  if (!entry) {
+    // No in-memory cache — fall back to disk check (survives restarts)
+    if (!cacheReset) {
+      const audioFile = path.join(AUDIO_DIR, `${icao}.mp3`);
+      if (existsSync(audioFile)) return `${baseUrl}/audio/${icao}.mp3`;
+    }
+    return null;
+  }
+  if (!entry.hasAudio) return null;
   return `${baseUrl}/audio/${icao}.mp3`;
 }
 
@@ -90,7 +95,11 @@ function getAudioUrl(icao, baseUrl) {
  */
 function resetCache() {
   cache.clear();
+  cacheReset = true;
 }
+
+// Track whether cache has been explicitly reset (disables disk fallback)
+let cacheReset = false;
 
 module.exports = {
   updateCache,

@@ -27,7 +27,9 @@ const atisData = new Map();
 const VOICE = { voice: 'Polly.Joanna', language: 'en-US' };
 const VOICE_SLOW = { voice: 'Polly.Joanna', language: 'en-US', rate: '85%' };
 
-const STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000;   // 2 hours
+const STALE_THRESHOLD_MS = 30 * 60 * 1000;         // 30 minutes (monitoring alert threshold)
+const MAX_CALL_DURATION = 180;                     // seconds
+const CALLER_STALE_MS = 2 * 60 * 60 * 1000;       // 2 hours (caller-facing staleness warning)
 const UNAVAIL_THRESHOLD_MS = 6 * 60 * 60 * 1000;  // 6 hours
 
 /**
@@ -38,7 +40,7 @@ function getStalenessState(cached) {
   if (!cached || !cached.updatedAt) return 'unavailable';
   const ageMs = Date.now() - new Date(cached.updatedAt).getTime();
   if (ageMs >= UNAVAIL_THRESHOLD_MS) return 'unavailable';
-  if (ageMs >= STALE_THRESHOLD_MS) return 'stale';
+  if (ageMs >= CALLER_STALE_MS) return 'stale';
   return 'fresh';
 }
 
@@ -189,9 +191,10 @@ app.get('/health', (req, res) => {
   for (const { icao } of AIRPORTS_LIST) {
     const d = getCache(icao);
     if (d) {
-      airports[icao] = { status: 'available', letter: d.letter, hasAudio: d.hasAudio, updatedAt: d.updatedAt };
+      const ageSeconds = Math.floor((Date.now() - new Date(d.updatedAt).getTime()) / 1000);
+      airports[icao] = { status: 'available', letter: d.letter, hasAudio: d.hasAudio, updatedAt: d.updatedAt, ageSeconds };
     } else {
-      airports[icao] = { status: 'unavailable' };
+      airports[icao] = { status: 'unavailable', updatedAt: null, ageSeconds: null };
       anyMissing = true;
     }
   }
@@ -274,5 +277,5 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, REGIONS, AIRPORTS_LIST, refreshAtisData, formatForSpeech, getStalenessState };
+module.exports = { app, REGIONS, AIRPORTS_LIST, AIRPORTS: AIRPORTS_LIST, refreshAtisData, formatForSpeech, getStalenessState, STALE_THRESHOLD_MS, MAX_CALL_DURATION };
 

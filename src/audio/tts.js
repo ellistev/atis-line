@@ -9,7 +9,7 @@ const { writeFile } = require('node:fs/promises');
  *                Only generates audio when ATIS letter changes - very cheap in practice.
  */
 
-const TTS_PROVIDER = process.env.TTS_PROVIDER || 'elevenlabs';
+const TTS_PROVIDER = process.env.TTS_PROVIDER || 'polly';
 
 /**
  * Generate an audio file from text using the configured TTS provider.
