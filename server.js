@@ -8,6 +8,7 @@ const { getRandomSignOff, getRandomJoke, ABOUT_TEXT } = require('./src/personali
 const { humanizeAtis } = require('./src/speech/humanize');
 const { recordSuccess, recordFailure, checkAlerts } = require('./src/monitoring/alerter');
 const { logCall } = require('./src/analytics/logger');
+const { readAnalytics, computeStats, renderDashboard } = require('./src/analytics/dashboard');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -182,6 +183,13 @@ app.post('/region-menu/:regionDigit', (req, res) => {
   gather.say(VOICE, generateRegionGreeting(region));
   twiml.redirect('/voice');
   res.type('text/xml').send(twiml.toString());
+});
+
+// --- Analytics dashboard ---
+app.get('/analytics', (req, res) => {
+  const entries = readAnalytics();
+  const stats = computeStats(entries);
+  res.type('text/html').send(renderDashboard(stats));
 });
 
 // --- Health check ---
