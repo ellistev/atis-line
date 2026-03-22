@@ -7,7 +7,7 @@ module.exports = {
     autorestart: true,
     watch: false,
     kill_timeout: 5000,
-    max_memory_restart: '256M',
+    max_memory_restart: '512M',
     env: {
       NODE_ENV: 'production',
       PORT: 3338,
