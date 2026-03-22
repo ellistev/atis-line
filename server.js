@@ -26,6 +26,21 @@ const atisData = new Map();
 const VOICE = { voice: 'Polly.Joanna', language: 'en-US' };
 const VOICE_SLOW = { voice: 'Polly.Joanna', language: 'en-US', rate: '85%' };
 
+const STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000;   // 2 hours
+const UNAVAIL_THRESHOLD_MS = 6 * 60 * 60 * 1000;  // 6 hours
+
+/**
+ * Determine staleness state from a cache entry.
+ * @returns {'fresh'|'stale'|'unavailable'}
+ */
+function getStalenessState(cached) {
+  if (!cached || !cached.updatedAt) return 'unavailable';
+  const ageMs = Date.now() - new Date(cached.updatedAt).getTime();
+  if (ageMs >= UNAVAIL_THRESHOLD_MS) return 'unavailable';
+  if (ageMs >= STALE_THRESHOLD_MS) return 'stale';
+  return 'fresh';
+}
+
 // --- IVR: top-level menu ---
 app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
@@ -99,18 +114,37 @@ app.post('/select-airport/:regionDigit', (req, res) => {
   }
 
   const cached = getCache(airport.icao);
-  
+
   // Check if we have a pre-generated MP3 on disk (survives restarts before first scrape)
   const audioUrl = getAudioUrl(airport.icao, BASE_URL);
-  
+
   if (!cached && !audioUrl) {
     twiml.say(VOICE, `${airport.name} ATIS is currently unavailable. Please try again shortly.`);
     twiml.redirect('/voice');
     return res.type('text/xml').send(twiml.toString());
   }
 
+  // Staleness check
+  const staleness = getStalenessState(cached);
+
+  if (staleness === 'unavailable') {
+    const ageHours = cached && cached.updatedAt
+      ? Math.floor((Date.now() - new Date(cached.updatedAt).getTime()) / 3600000)
+      : null;
+    const ageMsg = ageHours !== null ? ` Last update was ${ageHours} hours ago.` : '';
+    twiml.say(VOICE, `${airport.name} weather information is currently unavailable.${ageMsg} Please contact Flight Services for current conditions.`);
+    twiml.redirect('/voice');
+    return res.type('text/xml').send(twiml.toString());
+  }
+
   // Wrap everything in a Gather so # or digit works during playback
   const playGather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}`, method: 'POST', timeout: 8, finishOnKey: '#' });
+
+  if (staleness === 'stale') {
+    const ageHours = Math.floor((Date.now() - new Date(cached.updatedAt).getTime()) / 3600000);
+    playGather.say(VOICE, `Caution: this weather information was last updated ${ageHours} hours ago. Verify with official sources before flight.`);
+  }
+
   if (audioUrl) {
     playGather.play(`${audioUrl}?t=${Date.now()}`);
   } else {
@@ -230,5 +264,5 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, REGIONS, AIRPORTS_LIST, refreshAtisData, formatForSpeech };
+module.exports = { app, REGIONS, AIRPORTS_LIST, refreshAtisData, formatForSpeech, getStalenessState };
 
