@@ -6,6 +6,7 @@ const { scrapeAll, closeBrowser } = require('./src/data/aeroview');
 const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
 const { getRandomSignOff, getRandomJoke, ABOUT_TEXT } = require('./src/personality');
 const { humanizeAtis } = require('./src/speech/humanize');
+const { recordSuccess, recordFailure, checkAlerts } = require('./src/monitoring/alerter');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -196,11 +197,15 @@ async function refreshAtisData() {
     if (result && result.raw) {
       const speechText = await humanizeAtis(result.raw, name);
       await updateCache(icao, speechText, result.letter);
+      recordSuccess(icao);
       console.log(`  ${icao}: information ${result.letter || '?'}`);
     } else {
+      recordFailure(icao, 'No data returned from scraper');
       console.log(`  ${icao}: no data`);
     }
   }
+
+  await checkAlerts();
 }
 
 // --- Graceful shutdown (PM2 sends SIGINT/SIGTERM on restart) ---
