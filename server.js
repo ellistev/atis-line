@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const twilio = require('twilio');
 const { loadAirports, getRegions, generateTopGreeting, generateRegionGreeting } = require('./src/config/airports');
-const { scrapeAll } = require('./src/data/aeroview');
+const { scrapeAll, closeBrowser } = require('./src/data/aeroview');
 const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
 const { getRandomSignOff, getRandomJoke, ABOUT_TEXT } = require('./src/personality');
 const { humanizeAtis } = require('./src/speech/humanize');
@@ -202,6 +202,16 @@ async function refreshAtisData() {
     }
   }
 }
+
+// --- Graceful shutdown (PM2 sends SIGINT/SIGTERM on restart) ---
+async function shutdown(signal) {
+  console.log(`[${signal}] Shutting down, closing Playwright browser...`);
+  await closeBrowser();
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // --- Start ---
 if (require.main === module) {

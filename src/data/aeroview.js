@@ -21,11 +21,18 @@ let _browser = null;
 async function getBrowser() {
   if (_browser) {
     try {
-      if (_browser.isConnected()) return _browser;
-    } catch {
-      // fall through to reconnect
+      if (_browser.isConnected()) {
+        // Health check: try a simple operation to verify the browser is responsive
+        await Promise.race([
+          _browser.contexts(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('health check timeout')), 3000)),
+        ]);
+        return _browser;
+      }
+    } catch (err) {
+      console.warn(`[Aeroview] Browser unresponsive (${err.message}), recreating...`);
+      await closeBrowser();
     }
-    _browser = null;
   }
   if (USE_CDP) {
     try {
@@ -40,15 +47,42 @@ async function getBrowser() {
   return _browser;
 }
 
+/** Close the browser instance gracefully. Called on process shutdown. */
+async function closeBrowser() {
+  const browser = _browser;
+  _browser = null;
+  if (browser) {
+    try {
+      await browser.close();
+    } catch {
+      // already dead, ignore
+    }
+  }
+}
+
 /**
  * Scrape ATIS for a single airport from NAV CANADA Aeroview.
  * Returns { raw, letter } or null on failure.
  */
 async function scrapeAeroview(icao) {
-  const browser = await getBrowser();
+  let browser;
+  try {
+    browser = await getBrowser();
+  } catch (err) {
+    console.error(`[Aeroview] ${icao} browser launch failed:`, err.message);
+    return null;
+  }
   // connectOverCDP uses existing contexts - open a fresh page in the first context
-  const context = browser.contexts()[0] || await browser.newContext();
-  const page = await context.newPage();
+  let context, page;
+  try {
+    context = browser.contexts()[0] || await browser.newContext();
+    page = await context.newPage();
+  } catch (err) {
+    // Browser died between getBrowser() and page creation - reset and bail
+    console.warn(`[Aeroview] ${icao} browser died during page setup, resetting:`, err.message);
+    await closeBrowser();
+    return null;
+  }
   try {
     await page.goto(`https://spaces.navcanada.ca/workspace/aeroview/${icao}`, {
       waitUntil: 'domcontentloaded',
@@ -86,6 +120,10 @@ async function scrapeAeroview(icao) {
     return result;
   } catch (err) {
     console.error(`[Aeroview] ${icao} scrape failed:`, err.message);
+    // If the browser crashed mid-scrape, reset so next call gets a fresh one
+    if (!_browser || !_browser.isConnected()) {
+      await closeBrowser();
+    }
     return null;
   } finally {
     await page.close().catch(() => {});
@@ -110,4 +148,4 @@ async function scrapeAll(icaos) {
   return results;
 }
 
-module.exports = { scrapeAeroview, scrapeAll };
+module.exports = { scrapeAeroview, scrapeAll, closeBrowser, getBrowser };

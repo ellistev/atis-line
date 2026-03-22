@@ -2,9 +2,11 @@ module.exports = {
   apps: [{
     name: 'atis-line',
     script: 'server.js',
+    exec_mode: 'fork',
     instances: 1,
     autorestart: true,
     watch: false,
+    kill_timeout: 5000,
     max_memory_restart: '256M',
     env: {
       NODE_ENV: 'production',
