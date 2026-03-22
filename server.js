@@ -7,6 +7,7 @@ const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/c
 const { getRandomSignOff, getRandomJoke, ABOUT_TEXT } = require('./src/personality');
 const { humanizeAtis } = require('./src/speech/humanize');
 const { recordSuccess, recordFailure, checkAlerts } = require('./src/monitoring/alerter');
+const { startWatchdog } = require('./src/monitoring/watchdog');
 const { logCall } = require('./src/analytics/logger');
 const { readAnalytics, computeStats, renderDashboard } = require('./src/analytics/dashboard');
 
@@ -285,6 +286,7 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 if (require.main === module) {
   refreshAtisData();
   setInterval(refreshAtisData, 15 * 60 * 1000);
+  startWatchdog();
 
   app.listen(port, () => {
     console.log(`ATIS Line listening on port ${port}`);
