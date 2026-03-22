@@ -6,5 +6,6 @@
   { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYHC", "name": "Vancouver Harbour", "digit": "5" },
   { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYNJ", "name": "Langley", "digit": "6" },
   { "region": "Victoria", "regionDigit": "2", "icao": "CYYJ", "name": "Victoria International", "digit": "1" },
-  { "region": "Victoria", "regionDigit": "2", "icao": "CYCD", "name": "Nanaimo", "digit": "2" }
+  { "region": "Victoria", "regionDigit": "2", "icao": "CYCD", "name": "Nanaimo", "digit": "2" },
+  { "region": "Victoria", "regionDigit": "2", "icao": "CYWH", "name": "Victoria Harbour", "digit": "3" }
 ]
