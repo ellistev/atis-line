@@ -1,4 +1,5 @@
 const { exec } = require('node:child_process');
+const log = require('../logger');
 
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;     // 5 minutes
 const ALL_UNAVAIL_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes all-unavailable before force restart
@@ -26,7 +27,7 @@ async function sendTelegram(text) {
       body: JSON.stringify({ chat_id: chatId, text }),
     });
   } catch (err) {
-    console.error(`[Watchdog] Telegram alert failed: ${err.message}`);
+    log.error(`[Watchdog] Telegram alert failed: ${err.message}`);
   }
 }
 
@@ -34,9 +35,9 @@ function restartPm2() {
   return new Promise((resolve) => {
     exec('pm2 restart atis-line', (err, stdout, stderr) => {
       if (err) {
-        console.error(`[Watchdog] pm2 restart failed: ${err.message}`);
+        log.error(`[Watchdog] pm2 restart failed: ${err.message}`);
       } else {
-        console.log(`[Watchdog] pm2 restart triggered: ${stdout.trim()}`);
+        log.info(`[Watchdog] pm2 restart triggered: ${stdout.trim()}`);
       }
       resolve();
     });
@@ -51,11 +52,11 @@ async function checkHealth() {
     response = await fetch(url, { signal: AbortSignal.timeout(10_000) });
   } catch (err) {
     consecutiveFailures++;
-    console.warn(`[Watchdog] Health check failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}): ${err.message}`);
+    log.info(`[Watchdog] Health check failed (${consecutiveFailures}/${MAX_CONSECUTIVE_FAILURES}): ${err.message}`);
 
     if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
       const msg = `🚨 ATIS Watchdog: Health endpoint unreachable (${consecutiveFailures} consecutive failures). Restarting...`;
-      console.error(`[Watchdog] ${msg}`);
+      log.error(`[Watchdog] ${msg}`);
       await sendTelegram(msg);
       await restartPm2();
       consecutiveFailures = 0;
@@ -76,10 +77,10 @@ async function checkHealth() {
       const now = Date.now();
       if (!allUnavailableSince) {
         allUnavailableSince = now;
-        console.warn('[Watchdog] All airports unavailable — starting timer');
+        log.info('[Watchdog] All airports unavailable — starting timer');
       } else if (now - allUnavailableSince >= ALL_UNAVAIL_THRESHOLD_MS) {
         const msg = `🚨 ATIS Watchdog: ALL airports unavailable for ${Math.floor((now - allUnavailableSince) / 60_000)} minutes. Force restarting...`;
-        console.error(`[Watchdog] ${msg}`);
+        log.error(`[Watchdog] ${msg}`);
         await sendTelegram(msg);
         await restartPm2();
         allUnavailableSince = null;
@@ -88,12 +89,12 @@ async function checkHealth() {
       allUnavailableSince = null;
     }
   } catch (err) {
-    console.warn(`[Watchdog] Failed to parse health response: ${err.message}`);
+    log.info(`[Watchdog] Failed to parse health response: ${err.message}`);
   }
 }
 
 function startWatchdog() {
-  console.log('[Watchdog] Starting health monitor (every 5 min)');
+  log.info('[Watchdog] Starting health monitor (every 5 min)');
   _timer = setInterval(checkHealth, CHECK_INTERVAL_MS);
   // Run first check after a delay to let server finish starting
   setTimeout(checkHealth, 30_000);
