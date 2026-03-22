@@ -7,6 +7,7 @@ const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/c
 const { getRandomSignOff, getRandomJoke, ABOUT_TEXT } = require('./src/personality');
 const { humanizeAtis } = require('./src/speech/humanize');
 const { recordSuccess, recordFailure, checkAlerts } = require('./src/monitoring/alerter');
+const { logCall } = require('./src/analytics/logger');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -112,6 +113,15 @@ app.post('/select-airport/:regionDigit', (req, res) => {
     twiml.redirect(`/region-menu/${regionDigit}`);
     return res.type('text/xml').send(twiml.toString());
   }
+
+  // Log call analytics
+  logCall({
+    region: regionDigit,
+    airport: airport.icao,
+    duration: req.body.CallDuration ? Number(req.body.CallDuration) : null,
+    callerNumber: req.body.From,
+    callSid: req.body.CallSid,
+  });
 
   const cached = getCache(airport.icao);
 
