@@ -11,6 +11,7 @@ const { recordSuccess, recordFailure, checkAlerts } = require('./src/monitoring/
 const { startWatchdog } = require('./src/monitoring/watchdog');
 const { logCall } = require('./src/analytics/logger');
 const { readAnalytics, computeStats, renderDashboard } = require('./src/analytics/dashboard');
+const logger = require('./src/logger');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -246,7 +247,7 @@ function formatForSpeech(raw, icao, name, letter) {
 }
 
 async function refreshAtisData() {
-  console.log(`[${new Date().toISOString()}] Refreshing ATIS data...`);
+  logger.info(`[${new Date().toISOString()}] Refreshing ATIS data...`);
 
   // Split airports by source
   const aeroviewAirports = AIRPORTS_LIST.filter(a => (a.source || 'aeroview') === 'aeroview');
@@ -266,16 +267,16 @@ async function refreshAtisData() {
       if (cached && cached.letter && cached.letter === result.letter) {
         cached.updatedAt = new Date().toISOString();
         recordSuccess(icao);
-        console.log(`  ${icao}: information ${result.letter} (unchanged, skipping TTS)`);
+        logger.info(`  ${icao}: information ${result.letter} (unchanged, skipping TTS)`);
       } else {
         const speechText = await humanizeAtis(result.raw, name);
         await updateCache(icao, speechText, result.letter);
         recordSuccess(icao);
-        console.log(`  ${icao}: information ${result.letter || '?'}`);
+        logger.info(`  ${icao}: information ${result.letter || '?'}`);
       }
     } else {
       recordFailure(icao, 'No data returned from scraper');
-      console.log(`  ${icao}: no data`);
+      logger.info(`  ${icao}: no data`);
     }
   }
 
@@ -288,16 +289,16 @@ async function refreshAtisData() {
       if (cached && cached.letter && cached.letter === result.observationTime) {
         cached.updatedAt = new Date().toISOString();
         recordSuccess(icao);
-        console.log(`  ${icao}: METAR ${result.observationTime} (unchanged, skipping TTS)`);
+        logger.info(`  ${icao}: METAR ${result.observationTime} (unchanged, skipping TTS)`);
       } else {
         const speechText = await humanizeAtis(result.raw, name, { source: 'metar' });
         await updateCache(icao, speechText, result.observationTime);
         recordSuccess(icao);
-        console.log(`  ${icao}: METAR ${result.observationTime}`);
+        logger.info(`  ${icao}: METAR ${result.observationTime}`);
       }
     } else {
       recordFailure(icao, 'No METAR data returned');
-      console.log(`  ${icao}: no METAR data`);
+      logger.info(`  ${icao}: no METAR data`);
     }
   }
 

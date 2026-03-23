@@ -3,6 +3,8 @@
  * Uses the free aviationweather.gov API - no auth, no browser needed.
  */
 
+const logger = require('../logger');
+
 const METAR_API = 'https://aviationweather.gov/api/data/metar';
 
 /**
@@ -20,7 +22,7 @@ async function fetchMetar(icaoList) {
   try {
     const res = await fetch(url);
     if (!res.ok) {
-      console.error(`[METAR] API error: ${res.status}`);
+      logger.error(`[METAR] API error: ${res.status}`);
       return results;
     }
 
@@ -39,7 +41,7 @@ async function fetchMetar(icaoList) {
       }
     }
   } catch (err) {
-    console.error(`[METAR] Fetch failed: ${err.message}`);
+    logger.error(`[METAR] Fetch failed: ${err.message}`);
   }
 
   return results;

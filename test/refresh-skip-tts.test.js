@@ -129,17 +129,17 @@ describe('refreshAtisData skips TTS when letter unchanged', () => {
     scrapeAllImpl = async () => results1;
     await refreshAtisData();
 
-    // Capture logs on second scrape
+    // Capture logs on second scrape (logger.info writes to process.stdout)
     const logged = [];
-    const originalLog = console.log;
-    console.log = (...args) => { logged.push(args.join(' ')); };
+    const originalWrite = process.stdout.write;
+    process.stdout.write = (chunk, ...rest) => { logged.push(String(chunk)); return true; };
 
     const results2 = new Map();
     results2.set('CYPK', { raw: 'CYPK 182053Z 28010KT P6SM CLR', letter: 'B' });
     scrapeAllImpl = async () => results2;
     await refreshAtisData();
 
-    console.log = originalLog;
+    process.stdout.write = originalWrite;
 
     const skipMsg = logged.find(m => m.includes('unchanged, skipping TTS'));
     assert.ok(skipMsg, 'should log skip message containing "unchanged, skipping TTS"');
