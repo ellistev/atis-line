@@ -11,29 +11,15 @@ const { writeFile } = require('node:fs/promises');
 
 const TTS_PROVIDER = process.env.TTS_PROVIDER || 'polly';
 
-/** ElevenLabs premade voice pool — all included with the plan, no extra cost. */
-const VOICE_POOL = [
-  { id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica' },
-  { id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Roger' },
-  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George' },
-  { id: 'IKne3meq5aSn9XLyUdCD', name: 'Charlie' },
-  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah' },
-  { id: 'onwK4e9ZLuTAKqWW03F9', name: 'Daniel' },
-  { id: 'cjVigY5qzO86Huf0OWal', name: 'Eric' },
-  { id: 'nPczCjzI2devNBz1zQrb', name: 'Brian' },
-  { id: 'pqHfZKP75CvOlQylNhV4', name: 'Bill' },
-];
+/** ElevenLabs Jessica voice - warm, professional, everyone's favorite. */
+const JESSICA_VOICE = { id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica' };
 
 /**
- * Pick a random voice from the pool.
- * Falls back to ELEVENLABS_VOICE_ID env var (or Sarah) if pool is empty.
+ * Get the ElevenLabs voice to use for TTS.
+ * Always returns Jessica - she's the one.
  */
-function pickVoice(pool) {
-  if (pool && pool.length > 0) {
-    return pool[Math.floor(Math.random() * pool.length)];
-  }
-  const fallbackId = process.env.ELEVENLABS_VOICE_ID || 'EXAVITQu4vr4xnSDxMaL';
-  return { id: fallbackId, name: 'default' };
+function pickVoice() {
+  return JESSICA_VOICE;
 }
 
 /**
@@ -106,7 +92,7 @@ async function generateElevenLabs(text, outputPath) {
     return false;
   }
 
-  const voice = pickVoice(VOICE_POOL);
+  const voice = pickVoice();
   console.log(`[TTS] generated with voice: ${voice.name}`);
 
   try {
@@ -158,6 +144,6 @@ module.exports = {
   generateAudio,
   getTwilioVoice,
   TTS_PROVIDER,
-  VOICE_POOL,
+  JESSICA_VOICE,
   pickVoice,
 };
