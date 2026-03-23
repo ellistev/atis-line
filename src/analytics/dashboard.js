@@ -7,8 +7,9 @@ const ANALYTICS_PATH = path.join(__dirname, '..', '..', 'analytics.jsonl');
 const COST_DEFAULTS = {
   twilioBaseMonthlyCost: 0.15,
   twilioPerMinuteInbound: 0.0085,
-  elevenLabsCharsPerGeneration: 130,
-  elevenLabsPerCharCost: 0.00018,     // ~$0.18/1K chars (Starter plan)
+  elevenLabsMonthlyCost: 330,         // $330/mo Scale plan
+  elevenLabsMonthlyCredits: 2000000,  // 2M credits/month
+  elevenLabsCharsPerGeneration: 130,  // avg chars per ATIS TTS generation
   elevenLabsGenerationsPerDay: 30,    // ~2 updates/airport/day across 15 airports
   openaiPerHumanizerCall: 0.00012,
   averageCallDurationSeconds: 45,
@@ -159,13 +160,15 @@ function computeStats(entries, now = new Date(), costConfig = {}) {
   // Daily costs
   const dailyTwilioCost = dailyAvgCalls * avgDurationMinutes * costs.twilioPerMinuteInbound;
   const dailyOpenAiCost = dailyAvgCalls * costs.openaiPerHumanizerCall;
-  const dailyElevenLabsCost = costs.elevenLabsGenerationsPerDay * costs.elevenLabsCharsPerGeneration * costs.elevenLabsPerCharCost;
+  const dailyElevenLabsCost = costs.elevenLabsMonthlyCost / 30; // flat monthly rate spread daily
+  const dailyElevenLabsCreditsUsed = costs.elevenLabsGenerationsPerDay * costs.elevenLabsCharsPerGeneration;
   const dailyTotalCost = dailyTwilioCost + dailyOpenAiCost + dailyElevenLabsCost;
 
   // Monthly projections (30 days)
   const monthlyTwilioCost = costs.twilioBaseMonthlyCost + (dailyTwilioCost * 30);
   const monthlyOpenAiCost = dailyOpenAiCost * 30;
-  const monthlyElevenLabsCost = dailyElevenLabsCost * 30;
+  const monthlyElevenLabsCost = costs.elevenLabsMonthlyCost; // flat rate
+  const monthlyElevenLabsCreditsUsed = dailyElevenLabsCreditsUsed * 30;
   const monthlyTotalCost = monthlyTwilioCost + monthlyOpenAiCost + monthlyElevenLabsCost;
   const monthlyRunRate = dailyAvgCalls * 30;
 
@@ -201,6 +204,10 @@ function computeStats(entries, now = new Date(), costConfig = {}) {
       monthlyElevenLabs: round2(monthlyElevenLabsCost),
       monthlyTotal: round2(monthlyTotalCost),
       costPerCall: round4(costPerCall),
+      dailyElevenLabsCredits: Math.round(dailyElevenLabsCreditsUsed),
+      monthlyElevenLabsCredits: Math.round(monthlyElevenLabsCreditsUsed),
+      elevenLabsMonthlyCredits: costs.elevenLabsMonthlyCredits,
+      elevenLabsCreditUtilization: round2((monthlyElevenLabsCreditsUsed / costs.elevenLabsMonthlyCredits) * 100),
     },
   };
 }
@@ -255,6 +262,7 @@ function renderDashboard(stats) {
   .cost-item { padding: 12px; background: #f9f9f9; border-radius: 6px; }
   .cost-item .cost-label { font-size: 0.8em; color: #666; }
   .cost-item .cost-value { font-size: 1.3em; font-weight: 700; color: #059669; }
+  .cost-item .sub { font-size: 0.75em; color: #999; margin-top: 2px; }
   table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
   th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #eee; }
   th { background: #f9f9f9; font-weight: 600; font-size: 0.85em; color: #666; }
@@ -290,12 +298,12 @@ function renderDashboard(stats) {
   <div class="cost-grid">
     <div class="cost-item"><div class="cost-label">Daily Twilio</div><div class="cost-value">\$${cb.dailyTwilio.toFixed(2)}</div></div>
     <div class="cost-item"><div class="cost-label">Daily OpenAI</div><div class="cost-value">\$${cb.dailyOpenAi.toFixed(2)}</div></div>
-    <div class="cost-item"><div class="cost-label">Daily ElevenLabs</div><div class="cost-value">\$${cb.dailyElevenLabs.toFixed(2)}</div></div>
+    <div class="cost-item"><div class="cost-label">Daily ElevenLabs</div><div class="cost-value">\$${cb.dailyElevenLabs.toFixed(2)}</div><div class="sub">${(cb.dailyElevenLabsCredits || 0).toLocaleString()} credits/day</div></div>
     <div class="cost-item"><div class="cost-label">Daily Total</div><div class="cost-value">\$${cb.dailyTotal.toFixed(2)}</div></div>
     <div class="cost-item"><div class="cost-label">Cost per Call</div><div class="cost-value">\$${cb.costPerCall.toFixed(4)}</div></div>
     <div class="cost-item"><div class="cost-label">Monthly Twilio</div><div class="cost-value">\$${cb.monthlyTwilio.toFixed(2)}</div></div>
     <div class="cost-item"><div class="cost-label">Monthly OpenAI</div><div class="cost-value">\$${cb.monthlyOpenAi.toFixed(2)}</div></div>
-    <div class="cost-item"><div class="cost-label">Monthly ElevenLabs</div><div class="cost-value">\$${cb.monthlyElevenLabs.toFixed(2)}</div></div>
+    <div class="cost-item"><div class="cost-label">Monthly ElevenLabs</div><div class="cost-value">\$${cb.monthlyElevenLabs.toFixed(2)}</div><div class="sub">${(cb.monthlyElevenLabsCredits || 0).toLocaleString()} / ${(cb.elevenLabsMonthlyCredits || 0).toLocaleString()} credits (${cb.elevenLabsCreditUtilization || 0}%)</div></div>
     <div class="cost-item"><div class="cost-label">Projected Monthly Total</div><div class="cost-value">\$${cb.monthlyTotal.toFixed(2)}</div></div>
   </div>
 </div>

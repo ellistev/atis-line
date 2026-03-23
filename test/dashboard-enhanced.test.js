@@ -184,18 +184,22 @@ describe('enhanced computeStats', () => {
       assert.equal(stats.costBreakdown.dailyTwilio, 0.06);
       // Daily OpenAI: 10 * 0.00012 = 0.0012 => 0.0
       assert.equal(stats.costBreakdown.dailyOpenAi, 0);
-      // Daily ElevenLabs: 30 gens * 130 chars * 0.00018 = 0.702 => 0.7
-      assert.equal(stats.costBreakdown.dailyElevenLabs, 0.7);
+      // Daily ElevenLabs: $330/30 = $11.00
+      assert.equal(stats.costBreakdown.dailyElevenLabs, 11);
+      // Daily credits: 30 gens * 130 chars = 3900
+      assert.equal(stats.costBreakdown.dailyElevenLabsCredits, 3900);
       // Monthly Twilio: 0.15 + 0.06375*30 = 2.0625 => 2.06
       assert.equal(stats.costBreakdown.monthlyTwilio, 2.06);
+      // Monthly ElevenLabs: flat $330
+      assert.equal(stats.costBreakdown.monthlyElevenLabs, 330);
     });
 
     it('includes elevenlabs in daily total', () => {
       const stats = computeStats([], now);
-      // ElevenLabs: 30 * 130 * 0.00018 = 0.702 => 0.7
-      assert.equal(stats.costBreakdown.dailyElevenLabs, 0.7);
-      // Daily total = 0 (twilio) + 0 (openai) + 0.702 (elevenlabs) => 0.7
-      assert.equal(stats.costBreakdown.dailyTotal, 0.7);
+      // ElevenLabs: $330/30 = $11.00
+      assert.equal(stats.costBreakdown.dailyElevenLabs, 11);
+      // Daily total = 0 (twilio) + 0 (openai) + 11 (elevenlabs) => 11
+      assert.equal(stats.costBreakdown.dailyTotal, 11);
     });
 
     it('returns base twilio cost for empty entries', () => {
@@ -256,13 +260,17 @@ describe('enhanced renderDashboard', () => {
       costBreakdown: {
         dailyTwilio: 0.06,
         dailyOpenAi: 0.01,
-        dailyElevenLabs: 0.70,
-        dailyTotal: 0.77,
+        dailyElevenLabs: 11.00,
+        dailyTotal: 11.07,
         monthlyTwilio: 2.06,
         monthlyOpenAi: 0.30,
-        monthlyElevenLabs: 21.06,
-        monthlyTotal: 23.42,
+        monthlyElevenLabs: 330,
+        monthlyTotal: 332.36,
         costPerCall: 0.0065,
+        dailyElevenLabsCredits: 3900,
+        monthlyElevenLabsCredits: 117000,
+        elevenLabsMonthlyCredits: 2000000,
+        elevenLabsCreditUtilization: 5.85,
       },
     };
   }
@@ -309,9 +317,9 @@ describe('enhanced renderDashboard', () => {
     assert.ok(html.includes('Cost Breakdown'));
     assert.ok(html.includes('$0.06'));
     assert.ok(html.includes('$2.06'));
-    assert.ok(html.includes('$23.42'));
+    assert.ok(html.includes('$332.36'));
     assert.ok(html.includes('$0.0065'));
-    assert.ok(html.includes('$0.70'));
+    assert.ok(html.includes('$11.00'));
     assert.ok(html.includes('Projected Monthly Total'));
     assert.ok(html.includes('Cost per Call'));
     assert.ok(html.includes('ElevenLabs'));
@@ -347,6 +355,8 @@ describe('COST_DEFAULTS export', () => {
     assert.equal(COST_DEFAULTS.twilioBaseMonthlyCost, 0.15);
     assert.equal(COST_DEFAULTS.twilioPerMinuteInbound, 0.0085);
     assert.equal(COST_DEFAULTS.elevenLabsCharsPerGeneration, 130);
+    assert.equal(COST_DEFAULTS.elevenLabsMonthlyCost, 330);
+    assert.equal(COST_DEFAULTS.elevenLabsMonthlyCredits, 2000000);
     assert.equal(COST_DEFAULTS.openaiPerHumanizerCall, 0.00012);
     assert.equal(COST_DEFAULTS.averageCallDurationSeconds, 45);
   });
