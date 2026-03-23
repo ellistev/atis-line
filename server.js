@@ -196,6 +196,8 @@ app.post('/region-menu/:regionDigit', (req, res) => {
 app.get('/analytics', (req, res) => {
   const entries = readAnalytics();
   const stats = computeStats(entries);
+  const { readCreditLog, computeCreditStats } = require('./src/audio/credit-tracker');
+  stats.creditStats = computeCreditStats(readCreditLog());
   res.type('text/html').send(renderDashboard(stats));
 });
 

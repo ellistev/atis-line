@@ -1,4 +1,5 @@
 const { writeFile } = require('node:fs/promises');
+const { logGeneration } = require('./credit-tracker');
 
 /**
  * TTS provider abstraction.
@@ -93,7 +94,9 @@ async function generateElevenLabs(text, outputPath) {
   }
 
   const voice = pickVoice();
-  console.log(`[TTS] generated with voice: ${voice.name}`);
+  const chars = text.length;
+  const icao = require('node:path').basename(outputPath, '.mp3');
+  console.log(`[TTS] generating ${chars} chars for ${icao} with voice: ${voice.name}`);
 
   try {
     const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice.id}`, {
@@ -117,6 +120,7 @@ async function generateElevenLabs(text, outputPath) {
     if (!res.ok) {
       const err = await res.text();
       console.error(`ElevenLabs TTS error: ${res.status} ${err}`);
+      await logGeneration(icao, chars, voice.name, false).catch(() => {});
       // Quota exceeded or any error - fall back to OpenAI
       console.log('Falling back to OpenAI TTS...');
       return generateOpenAI(text, outputPath);
@@ -124,9 +128,11 @@ async function generateElevenLabs(text, outputPath) {
 
     const buffer = Buffer.from(await res.arrayBuffer());
     await writeFile(outputPath, buffer);
+    await logGeneration(icao, chars, voice.name, true).catch(() => {});
     return true;
   } catch (err) {
     console.error(`ElevenLabs TTS failed: ${err.message}`);
+    await logGeneration(icao, chars, voice.name, false).catch(() => {});
     console.log('Falling back to OpenAI TTS...');
     return generateOpenAI(text, outputPath);
   }

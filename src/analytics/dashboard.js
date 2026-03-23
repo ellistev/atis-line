@@ -237,6 +237,7 @@ function renderDashboard(stats) {
   const avgLookupsPerCall = stats.avgLookupsPerCall || 0;
   const newCallers = stats.newCallers || 0;
   const returningCallers = stats.returningCallers || 0;
+  const cs = stats.creditStats || null;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -307,6 +308,18 @@ function renderDashboard(stats) {
     <div class="cost-item"><div class="cost-label">Projected Monthly Total</div><div class="cost-value">\$${cb.monthlyTotal.toFixed(2)}</div></div>
   </div>
 </div>
+
+${cs ? `<div class="cost-section">
+  <h2>ElevenLabs Credit Usage (Actual)</h2>
+  <div class="cost-grid">
+    <div class="cost-item"><div class="cost-label">Today</div><div class="cost-value">${cs.todayChars.toLocaleString()}</div><div class="sub">${cs.todayGenerations} generations</div></div>
+    <div class="cost-item"><div class="cost-label">This Month</div><div class="cost-value">${cs.monthChars.toLocaleString()}</div><div class="sub">${cs.monthGenerations} generations</div></div>
+    <div class="cost-item"><div class="cost-label">Avg Daily</div><div class="cost-value">${cs.avgDailyChars.toLocaleString()}</div><div class="sub">over ${cs.activeDays} days</div></div>
+    <div class="cost-item"><div class="cost-label">Projected Monthly</div><div class="cost-value">${cs.projectedMonthlyChars.toLocaleString()}</div><div class="sub">credits at current rate</div></div>
+    <div class="cost-item"><div class="cost-label">All Time</div><div class="cost-value">${cs.totalChars.toLocaleString()}</div><div class="sub">${cs.totalGenerations} generations</div></div>
+    <div class="cost-item"><div class="cost-label">Creator Plan Fit</div><div class="cost-value">${cs.projectedMonthlyChars <= 100000 ? 'Within 100K' : Math.round((cs.projectedMonthlyChars - 100000) / 1000) + 'K overage'}</div><div class="sub">${cs.projectedMonthlyChars <= 100000 ? '$22/mo' : '$22 + $' + ((cs.projectedMonthlyChars - 100000) / 1000 * 0.30).toFixed(2) + ' overage'}</div></div>
+  </div>
+</div>` : '<!-- No credit tracking data yet -->'}
 
 <div class="charts">
   <div class="chart-box">

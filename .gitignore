@@ -4,3 +4,4 @@ node_modules/
 audio/*.mp3
 analytics.jsonl
 logs/
+elevenlabs-credits.jsonl
