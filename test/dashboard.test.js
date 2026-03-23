@@ -135,6 +135,81 @@ describe('analytics/dashboard', () => {
       assert.equal(stats.recentCalls[0].timestamp, entries[24].timestamp);
       assert.equal(stats.recentCalls[19].timestamp, entries[5].timestamp);
     });
+
+    it('tracks unique callers per day', () => {
+      const entries = [
+        { timestamp: '2026-03-21T10:00:00Z', region: 1, airport: 'CYVR', caller: 'aaa' },
+        { timestamp: '2026-03-21T11:00:00Z', region: 1, airport: 'CYVR', caller: 'aaa' },
+        { timestamp: '2026-03-21T12:00:00Z', region: 1, airport: 'CYVR', caller: 'bbb' },
+        { timestamp: '2026-03-22T10:00:00Z', region: 1, airport: 'CYVR', caller: 'ccc' },
+      ];
+      const stats = computeStats(entries, new Date('2026-03-22T15:00:00Z'));
+      assert.equal(stats.uniqueCallersTotal, 3);
+      assert.equal(stats.uniqueCallersPerDay.length, 2);
+      // Day 1: aaa + bbb = 2 unique, Day 2: ccc = 1 unique
+      assert.deepEqual(stats.uniqueCallersPerDay[0], ['2026-03-21', 2]);
+      assert.deepEqual(stats.uniqueCallersPerDay[1], ['2026-03-22', 1]);
+    });
+
+    it('identifies new vs returning callers for today', () => {
+      const entries = [
+        { timestamp: '2026-03-20T10:00:00Z', region: 1, airport: 'CYVR', caller: 'aaa' },
+        { timestamp: '2026-03-21T10:00:00Z', region: 1, airport: 'CYVR', caller: 'aaa' },
+        { timestamp: '2026-03-21T11:00:00Z', region: 1, airport: 'CYVR', caller: 'bbb' },
+      ];
+      const stats = computeStats(entries, new Date('2026-03-21T15:00:00Z'));
+      assert.equal(stats.newCallers, 1);       // bbb is new today
+      assert.equal(stats.returningCallers, 1);  // aaa was seen before
+    });
+
+    it('computes average lookups per call using sid', () => {
+      const entries = [
+        { timestamp: '2026-03-21T10:00:00Z', region: 1, airport: 'CYVR', caller: 'aaa', sid: 'call1' },
+        { timestamp: '2026-03-21T10:01:00Z', region: 1, airport: 'CYPK', caller: 'aaa', sid: 'call1' },
+        { timestamp: '2026-03-21T10:02:00Z', region: 1, airport: 'CYXX', caller: 'aaa', sid: 'call1' },
+        { timestamp: '2026-03-21T11:00:00Z', region: 1, airport: 'CYVR', caller: 'bbb', sid: 'call2' },
+      ];
+      const stats = computeStats(entries);
+      // call1: 3 lookups, call2: 1 lookup, avg = 2
+      assert.equal(stats.avgLookupsPerCall, 2);
+    });
+
+    it('identifies peak hour', () => {
+      const h10a = new Date(2026, 2, 21, 10, 0, 0).toISOString();
+      const h10b = new Date(2026, 2, 21, 10, 30, 0).toISOString();
+      const h10c = new Date(2026, 2, 21, 10, 45, 0).toISOString();
+      const h14 = new Date(2026, 2, 21, 14, 0, 0).toISOString();
+      const entries = [
+        { timestamp: h10a, region: 1, airport: 'CYVR' },
+        { timestamp: h10b, region: 1, airport: 'CYVR' },
+        { timestamp: h10c, region: 1, airport: 'CYVR' },
+        { timestamp: h14, region: 1, airport: 'CYVR' },
+      ];
+      const stats = computeStats(entries);
+      assert.equal(stats.peakHour, 10);
+      assert.equal(stats.peakHourCalls, 3);
+    });
+
+    it('computes cost breakdown with configurable rates', () => {
+      const entries = [
+        { timestamp: '2026-03-21T10:00:00Z', region: 1, airport: 'CYVR', duration: 60, caller: 'aaa' },
+        { timestamp: '2026-03-21T11:00:00Z', region: 1, airport: 'CYVR', duration: 60, caller: 'bbb' },
+      ];
+      const stats = computeStats(entries, new Date('2026-03-21T15:00:00Z'));
+      assert.ok(stats.costBreakdown);
+      assert.ok(stats.costBreakdown.dailyTwilio >= 0);
+      assert.ok(stats.costBreakdown.dailyOpenAi >= 0);
+      assert.ok(stats.costBreakdown.dailyElevenLabs >= 0);
+      assert.ok(stats.costBreakdown.monthlyTotal > 0);
+      assert.ok(stats.costBreakdown.costPerCall >= 0);
+      assert.equal(stats.monthlyRunRate, 60); // 2 calls/day * 30 days
+    });
+
+    it('returns cost breakdown with zeroed values for empty entries', () => {
+      const stats = computeStats([]);
+      assert.ok(stats.costBreakdown);
+      assert.equal(stats.costBreakdown.costPerCall, 0);
+    });
   });
 
   describe('renderDashboard', () => {
@@ -156,6 +231,20 @@ describe('analytics/dashboard', () => {
         hourlyData: new Array(24).fill(0),
         regionCounts: { 1: 25, 2: 17 },
         recentCalls: [],
+        uniqueCallersPerDay: [],
+        uniqueCallersTotal: 3,
+        newCallers: 1,
+        returningCallers: 2,
+        avgLookupsPerCall: 1.5,
+        peakHour: 10,
+        peakHourCalls: 5,
+        monthlyRunRate: 180,
+        costBreakdown: {
+          dailyTwilio: 0.01, dailyOpenAi: 0.00, dailyElevenLabs: 0.00,
+          dailyTotal: 0.01, costPerCall: 0.0017,
+          monthlyTwilio: 0.45, monthlyOpenAi: 0.01, monthlyElevenLabs: 0.00,
+          monthlyTotal: 0.46,
+        },
       };
       const html = renderDashboard(stats);
       assert.ok(html.includes('>42<'));
@@ -174,6 +263,20 @@ describe('analytics/dashboard', () => {
         hourlyData: new Array(24).fill(0),
         regionCounts: { 1: 1 },
         recentCalls: [{ timestamp: '2026-03-21T10:00:00Z', airport: 'CYVR', region: 1, duration: 30, caller: 'abc123' }],
+        uniqueCallersPerDay: [['03-21', 1]],
+        uniqueCallersTotal: 1,
+        newCallers: 1,
+        returningCallers: 0,
+        avgLookupsPerCall: 1,
+        peakHour: 10,
+        peakHourCalls: 1,
+        monthlyRunRate: 30,
+        costBreakdown: {
+          dailyTwilio: 0.01, dailyOpenAi: 0.00, dailyElevenLabs: 0.00,
+          dailyTotal: 0.01, costPerCall: 0.01,
+          monthlyTwilio: 0.45, monthlyOpenAi: 0.00, monthlyElevenLabs: 0.00,
+          monthlyTotal: 0.45,
+        },
       };
       const html = renderDashboard(stats);
       assert.ok(html.includes('CYVR'));
