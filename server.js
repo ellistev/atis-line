@@ -297,8 +297,14 @@ async function refreshAtisData() {
         logger.info(`  ${icao}: METAR ${result.observationTime}`);
       }
     } else {
-      recordFailure(icao, 'No METAR data returned');
-      logger.info(`  ${icao}: no METAR data`);
+      // No fresh METAR — keep last known weather if we have it
+      const cached = getCache(icao);
+      if (cached && cached.updatedAt) {
+        logger.info(`  ${icao}: no fresh METAR, keeping last known from ${cached.updatedAt}`);
+      } else {
+        recordFailure(icao, 'No METAR data returned');
+        logger.info(`  ${icao}: no METAR data (never received)`);
+      }
     }
   }
 
