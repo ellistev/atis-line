@@ -3,6 +3,7 @@ const express = require('express');
 const twilio = require('twilio');
 const { loadAirports, getRegions, generateTopGreeting, generateRegionGreeting } = require('./src/config/airports');
 const { scrapeAll, closeBrowser } = require('./src/data/aeroview');
+const { fetchMetar } = require('./src/data/metar');
 const { updateCache, getCache, getAudioUrl, AUDIO_DIR } = require('./src/audio/cache-manager');
 const { getRandomSignOff, getRandomJoke, ABOUT_TEXT } = require('./src/personality');
 const { humanizeAtis } = require('./src/speech/humanize');
@@ -10,6 +11,7 @@ const { recordSuccess, recordFailure, checkAlerts } = require('./src/monitoring/
 const { startWatchdog } = require('./src/monitoring/watchdog');
 const { logCall } = require('./src/analytics/logger');
 const { readAnalytics, computeStats, renderDashboard } = require('./src/analytics/dashboard');
+const logger = require('./src/logger');
 
 const app = express();
 const port = process.env.PORT || 3338;
@@ -245,27 +247,58 @@ function formatForSpeech(raw, icao, name, letter) {
 }
 
 async function refreshAtisData() {
-  console.log(`[${new Date().toISOString()}] Refreshing ATIS from Aeroview...`);
-  const results = await scrapeAll(ALL_ICAOS);
+  logger.info(`[${new Date().toISOString()}] Refreshing ATIS data...`);
 
-  for (const { icao, name } of AIRPORTS_LIST) {
-    const result = results.get(icao);
+  // Split airports by source
+  const aeroviewAirports = AIRPORTS_LIST.filter(a => (a.source || 'aeroview') === 'aeroview');
+  const metarAirports = AIRPORTS_LIST.filter(a => a.source === 'metar');
+
+  // Fetch both sources in parallel
+  const [aeroviewResults, metarResults] = await Promise.all([
+    aeroviewAirports.length ? scrapeAll(aeroviewAirports.map(a => a.icao)) : new Map(),
+    metarAirports.length ? fetchMetar(metarAirports.map(a => a.icao)) : new Map(),
+  ]);
+
+  // Process Aeroview airports
+  for (const { icao, name } of aeroviewAirports) {
+    const result = aeroviewResults.get(icao);
     if (result && result.raw) {
       const cached = getCache(icao);
       if (cached && cached.letter && cached.letter === result.letter) {
-        // ATIS letter unchanged — skip humanizer and TTS to save quota
         cached.updatedAt = new Date().toISOString();
         recordSuccess(icao);
-        console.log(`  ${icao}: information ${result.letter} (unchanged, skipping TTS)`);
+        logger.info(`  ${icao}: information ${result.letter} (unchanged, skipping TTS)`);
       } else {
         const speechText = await humanizeAtis(result.raw, name);
         await updateCache(icao, speechText, result.letter);
         recordSuccess(icao);
-        console.log(`  ${icao}: information ${result.letter || '?'}`);
+        logger.info(`  ${icao}: information ${result.letter || '?'}`);
       }
     } else {
       recordFailure(icao, 'No data returned from scraper');
-      console.log(`  ${icao}: no data`);
+      logger.info(`  ${icao}: no data`);
+    }
+  }
+
+  // Process METAR airports
+  for (const { icao, name } of metarAirports) {
+    const result = metarResults.get(icao);
+    if (result && result.raw) {
+      const cached = getCache(icao);
+      // Use observation time as change key (like ATIS letter for D-ATIS)
+      if (cached && cached.letter && cached.letter === result.observationTime) {
+        cached.updatedAt = new Date().toISOString();
+        recordSuccess(icao);
+        logger.info(`  ${icao}: METAR ${result.observationTime} (unchanged, skipping TTS)`);
+      } else {
+        const speechText = await humanizeAtis(result.raw, name, { source: 'metar' });
+        await updateCache(icao, speechText, result.observationTime);
+        recordSuccess(icao);
+        logger.info(`  ${icao}: METAR ${result.observationTime}`);
+      }
+    } else {
+      recordFailure(icao, 'No METAR data returned');
+      logger.info(`  ${icao}: no METAR data`);
     }
   }
 
