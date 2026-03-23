@@ -1,11 +1,16 @@
 [
-  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYVR", "name": "Vancouver International", "digit": "1" },
-  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYXX", "name": "Abbotsford", "digit": "2" },
-  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYPK", "name": "Pitt Meadows", "digit": "3" },
-  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CZBB", "name": "Boundary Bay", "digit": "4" },
-  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYHC", "name": "Vancouver Harbour", "digit": "5" },
-  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYNJ", "name": "Langley", "digit": "6" },
-  { "region": "Victoria", "regionDigit": "2", "icao": "CYYJ", "name": "Victoria International", "digit": "1" },
-  { "region": "Victoria", "regionDigit": "2", "icao": "CYCD", "name": "Nanaimo", "digit": "2" },
-  { "region": "Victoria", "regionDigit": "2", "icao": "CYWH", "name": "Victoria Harbour", "digit": "3" }
+  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYVR", "name": "Vancouver International", "digit": "1", "source": "aeroview" },
+  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYXX", "name": "Abbotsford", "digit": "2", "source": "aeroview" },
+  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYPK", "name": "Pitt Meadows", "digit": "3", "source": "aeroview" },
+  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CZBB", "name": "Boundary Bay", "digit": "4", "source": "aeroview" },
+  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYHC", "name": "Vancouver Harbour", "digit": "5", "source": "aeroview" },
+  { "region": "Lower Mainland", "regionDigit": "1", "icao": "CYNJ", "name": "Langley", "digit": "6", "source": "aeroview" },
+  { "region": "Victoria", "regionDigit": "2", "icao": "CYYJ", "name": "Victoria International", "digit": "1", "source": "aeroview" },
+  { "region": "Victoria", "regionDigit": "2", "icao": "CYCD", "name": "Nanaimo", "digit": "2", "source": "aeroview" },
+  { "region": "Victoria", "regionDigit": "2", "icao": "CYWH", "name": "Victoria Harbour", "digit": "3", "source": "aeroview" },
+  { "region": "North Coast", "regionDigit": "3", "icao": "CYPR", "name": "Prince Rupert", "digit": "1", "source": "metar" },
+  { "region": "North Coast", "regionDigit": "3", "icao": "CYXT", "name": "Terrace", "digit": "2", "source": "metar" },
+  { "region": "North Coast", "regionDigit": "3", "icao": "CZMT", "name": "Masset", "digit": "3", "source": "metar" },
+  { "region": "North Coast", "regionDigit": "3", "icao": "CYZP", "name": "Sandspit", "digit": "4", "source": "metar" },
+  { "region": "North Coast", "regionDigit": "3", "icao": "CBBC", "name": "Bella Coola", "digit": "5", "source": "metar" }
 ]

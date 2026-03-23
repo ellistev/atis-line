@@ -6,25 +6,38 @@
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-const SYSTEM_PROMPT = `You are converting raw NAV CANADA ATIS text into natural spoken aviation English for a phone ATIS service.
+const SYSTEM_PROMPT = `You are converting raw aviation weather text into natural spoken aviation English for a phone weather service.
+
+The input may be either:
+1. A NAV CANADA D-ATIS text (longer, includes runway info, ATIS letter)
+2. A raw METAR observation string (single line, e.g. "CYPR 221800Z 31008KT 15SM FEW040 BKN100 12/08 A2992 RMK...")
 
 Rules:
-- Read it exactly like a real ATIS broadcast - clear, professional, measured pace
+- Read it exactly like a real aviation weather broadcast - clear, professional, measured pace
 - Expand all abbreviations: KT → knots, VIS → visibility, CIG → ceiling, BKN → broken, OVC → overcast, SCT → scattered, FEW → few, SM → statute miles, RWY → runway, LDG → landing, DEP → departure, APCH → approach, RNAV → R-NAV, ILS → I-L-S, NDB → N-D-B, TEMP → temperature, DEW → dewpoint, A → altimeter
 - Convert cloud heights: BKN020 → broken ceiling at 2 thousand feet, OVC005 → overcast ceiling at 500 feet
 - Convert winds: 18005KT → wind one-eight-zero at 5 knots, 27015G25KT → wind two-seven-zero at 15 gusting 25 knots, VRB03KT → winds variable at 3 knots
 - Altimeter: A3021 → altimeter 30 point 21
 - Time: 1520Z → 15 20 zulu
-- ATIS letter: spell it phonetically (B → Bravo, O → Oscar, etc.)
-- Start with: "[Airport name] arrival ATIS information [phonetic letter], [time] zulu."
-- End with: "Advise [ICAO] on initial contact you have information [phonetic letter]."
+- Temperature/dewpoint: 12/08 → temperature 12, dewpoint 8. M02/M05 → temperature minus 2, dewpoint minus 5
+- For D-ATIS input:
+  - ATIS letter: spell it phonetically (B → Bravo, O → Oscar, etc.)
+  - Start with: "[Airport name] arrival ATIS information [phonetic letter], [time] zulu."
+  - End with: "Advise [ICAO] on initial contact you have information [phonetic letter]."
+- For METAR input:
+  - Start with: "[Airport name] automated weather observation, [time] zulu."
+  - End with: "End of automated weather observation for [Airport name]."
+  - Do NOT mention ATIS letter or "advise on initial contact"
 - Do NOT include the runway table or disclaimer text - just the weather broadcast
+- Strip the RMK (remarks) section from METAR
 - Output plain text only, no markdown`;
 
-async function humanizeAtis(rawAtis, airportName) {
+async function humanizeAtis(rawAtis, airportName, { source = 'aeroview' } = {}) {
   if (!OPENAI_API_KEY) {
-    return basicCleanup(rawAtis, airportName);
+    return basicCleanup(rawAtis, airportName, source);
   }
+
+  const inputLabel = source === 'metar' ? 'Raw METAR' : 'Raw ATIS';
 
   try {
     const res = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -37,7 +50,7 @@ async function humanizeAtis(rawAtis, airportName) {
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: `Airport: ${airportName}\nRaw ATIS: ${rawAtis}` },
+          { role: 'user', content: `Airport: ${airportName}\n${inputLabel}: ${rawAtis}` },
         ],
         max_tokens: 400,
         temperature: 0.1,
@@ -57,14 +70,14 @@ async function humanizeAtis(rawAtis, airportName) {
     return text;
   } catch (err) {
     console.error(`[Humanize] Failed: ${err.message}`);
-    return basicCleanup(rawAtis, airportName);
+    return basicCleanup(rawAtis, airportName, source);
   }
 }
 
 /**
  * Regex-based fallback if OpenRouter is unavailable.
  */
-function basicCleanup(raw, airportName) {
+function basicCleanup(raw, airportName, source = 'aeroview') {
   // Strip runway table and disclaimer
   const cleaned = raw
     .replace(/\nRunway[\s\S]*/i, '')

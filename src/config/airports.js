@@ -45,7 +45,7 @@ function getRegions(list) {
     if (!map[entry.regionDigit]) {
       map[entry.regionDigit] = { region: entry.region, airports: [] };
     }
-    map[entry.regionDigit].airports.push({ icao: entry.icao, name: entry.name, digit: entry.digit });
+    map[entry.regionDigit].airports.push({ icao: entry.icao, name: entry.name, digit: entry.digit, source: entry.source || 'aeroview' });
   }
   // Sort airports within each region by digit
   for (const r of Object.values(map)) {
@@ -60,7 +60,11 @@ function getRegions(list) {
 function generateTopGreeting(regions) {
   const items = Object.entries(regions)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([digit, r]) => `Press ${digit} for ${r.region}.`)
+    .map(([digit, r]) => {
+      const isMetar = r.airports.length > 0 && r.airports.every(a => a.source === 'metar');
+      const label = isMetar ? `${r.region} weather` : r.region;
+      return `Press ${digit} for ${label}.`;
+    })
     .join(' ');
   return (
     'Welcome to Lower Mainland and Vancouver Island aviation weather. ' +
@@ -74,11 +78,17 @@ function generateTopGreeting(regions) {
 /**
  * Build sub-menu greeting for a region.
  */
+const METAR_DISCLAIMER = 'These are automated weather observations for informational purposes only. This is not official aviation weather data. Always verify with official sources before flight.';
+
 function generateRegionGreeting(regionData) {
   const items = regionData.airports
     .map(a => `Press ${a.digit} for ${a.name}.`)
     .join(' ');
-  return `${regionData.region} airports. ${items}`;
+  const isMetar = regionData.airports.length > 0 && regionData.airports.every(a => a.source === 'metar');
+  const prefix = isMetar
+    ? `${regionData.region} weather. ${METAR_DISCLAIMER}`
+    : `${regionData.region} airports.`;
+  return `${prefix} ${items}`;
 }
 
 module.exports = { loadAirports, validate, getRegions, generateTopGreeting, generateRegionGreeting };

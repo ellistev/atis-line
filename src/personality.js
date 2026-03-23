@@ -52,6 +52,8 @@ const ABOUT_TEXT =
   'When NAV CANADA retired the phone based ATIS for the Lower Mainland, we decided to bring it back ourselves. ' +
   'We pull weather data from public sources and read it back in a format pilots are used to. ' +
   'It\'s not official, but it\'s made with love and a healthy respect for good weather briefings. ' +
+  'This service is for informational purposes only and is not affiliated with or endorsed by NAV CANADA or Transport Canada. ' +
+  'Always verify weather information with official sources before making any flight decisions. Use at your own risk. ' +
   'Thanks for calling, and tell your flying buddies about us.';
 
 function getRandomSignOff() {
