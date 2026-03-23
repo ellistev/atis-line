@@ -113,7 +113,11 @@ app.post('/select-airport/:regionDigit', (req, res) => {
     return res.type('text/xml').send(twiml.toString());
   }
 
-  const airport = region.airports.find(a => a.digit === digit);
+  // * = replay last airport (digit carried via query param)
+  const lastAirport = req.query.lastAirport;
+  const effectiveDigit = (digit === '*' && lastAirport) ? lastAirport : digit;
+
+  const airport = region.airports.find(a => a.digit === effectiveDigit);
   if (!airport) {
     twiml.say(VOICE, 'Invalid selection.');
     twiml.redirect(`/region-menu/${regionDigit}`);
@@ -154,7 +158,7 @@ app.post('/select-airport/:regionDigit', (req, res) => {
   }
 
   // Wrap everything in a Gather so # or digit works during playback
-  const playGather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}`, method: 'POST', timeout: 8, finishOnKey: '#' });
+  const playGather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}?lastAirport=${effectiveDigit}`, method: 'POST', timeout: 8, finishOnKey: '#' });
 
   if (staleness === 'stale') {
     const ageHours = Math.floor((Date.now() - new Date(cached.updatedAt).getTime()) / 3600000);
@@ -168,7 +172,7 @@ app.post('/select-airport/:regionDigit', (req, res) => {
   }
   playGather.pause({ length: 1 });
   playGather.say(VOICE, getRandomSignOff());
-  playGather.say(VOICE, 'Press another number for a different airport, or pound to go back to the region menu.');
+  playGather.say(VOICE, 'Press star to hear it again, another number for a different airport, or pound to go back to the region menu.');
   twiml.hangup();
   res.type('text/xml').send(twiml.toString());
 });
