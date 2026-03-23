@@ -20,6 +20,10 @@ let scrapeAllImpl = async () => new Map();
 aeroviewMod.scrapeAll = async (...args) => scrapeAllImpl(...args);
 aeroviewMod.closeBrowser = async () => {};
 
+// Pre-load and patch METAR fetcher (prevent real API calls)
+const metarMod = require('../src/data/metar');
+metarMod.fetchMetar = async () => new Map();
+
 // Pre-load and patch TTS
 const ttsMod = require('../src/audio/tts');
 let generateAudioCallCount = 0;

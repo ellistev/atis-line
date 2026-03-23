@@ -17,7 +17,7 @@ async function fetchMetar(icaoList) {
   if (!icaoList.length) return results;
 
   const ids = icaoList.join(',');
-  const url = `${METAR_API}?ids=${ids}&format=raw&hours=1`;
+  const url = `${METAR_API}?ids=${ids}&format=raw&hours=3`;
 
   try {
     const res = await fetch(url);
@@ -49,12 +49,13 @@ async function fetchMetar(icaoList) {
 
 /**
  * Parse ICAO and observation time from a raw METAR line.
- * METAR format: "CYPR 221800Z 31008KT ..."
+ * METAR format: "METAR CYPR 221800Z 31008KT ..." or "SPECI CYPR 221800Z ..."
+ * Also handles lines without the METAR/SPECI prefix: "CYPR 221800Z 31008KT ..."
  * @param {string} line
  * @returns {{ icao: string, observationTime: string } | null}
  */
 function parseMetarLine(line) {
-  const match = line.match(/^([A-Z]{4})\s+(\d{6}Z)\s/);
+  const match = line.match(/^(?:(?:METAR|SPECI)\s+)?([A-Z]{4})\s+(\d{6}Z)\s/);
   if (!match) return null;
   return { icao: match[1], observationTime: match[2] };
 }
