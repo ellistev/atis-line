@@ -51,7 +51,7 @@ function getStalenessState(cached) {
 // --- IVR: top-level menu ---
 app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
-  const gather = twiml.gather({ numDigits: 1, action: '/select-region', method: 'POST', timeout: 10, finishOnKey: '#' });
+  const gather = twiml.gather({ numDigits: 1, action: '/select-region', method: 'POST', timeout: 10, finishOnKey: '' });
   gather.say(VOICE, generateTopGreeting(REGIONS));
   twiml.redirect('/voice');
   res.type('text/xml').send(twiml.toString());
@@ -89,7 +89,7 @@ app.post('/select-region', (req, res) => {
     return res.type('text/xml').send(twiml.toString());
   }
 
-  const gather = twiml.gather({ numDigits: 1, action: `/select-airport/${digit}`, method: 'POST', timeout: 10, finishOnKey: '#' });
+  const gather = twiml.gather({ numDigits: 1, action: `/select-airport/${digit}`, method: 'POST', timeout: 10, finishOnKey: '' });
   gather.say(VOICE, generateRegionGreeting(region));
   twiml.redirect('/voice');
   res.type('text/xml').send(twiml.toString());
@@ -158,7 +158,7 @@ app.post('/select-airport/:regionDigit', (req, res) => {
   }
 
   // Wrap everything in a Gather so # or digit works during playback
-  const playGather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}?lastAirport=${effectiveDigit}`, method: 'POST', timeout: 8, finishOnKey: '#' });
+  const playGather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}?lastAirport=${effectiveDigit}`, method: 'POST', timeout: 8, finishOnKey: '' });
 
   if (staleness === 'stale') {
     const ageHours = Math.floor((Date.now() - new Date(cached.updatedAt).getTime()) / 3600000);
@@ -186,7 +186,7 @@ app.post('/region-menu/:regionDigit', (req, res) => {
     twiml.redirect('/voice');
     return res.type('text/xml').send(twiml.toString());
   }
-  const gather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}`, method: 'POST', timeout: 10, finishOnKey: '#' });
+  const gather = twiml.gather({ numDigits: 1, action: `/select-airport/${regionDigit}`, method: 'POST', timeout: 10, finishOnKey: '' });
   gather.say(VOICE, generateRegionGreeting(region));
   twiml.redirect('/voice');
   res.type('text/xml').send(twiml.toString());
