@@ -12,5 +12,9 @@
   { "region": "North Coast", "regionDigit": "3", "icao": "CYXT", "name": "Terrace", "digit": "2", "source": "metar" },
   { "region": "North Coast", "regionDigit": "3", "icao": "CZMT", "name": "Masset", "digit": "3", "source": "metar" },
   { "region": "North Coast", "regionDigit": "3", "icao": "CYZP", "name": "Sandspit", "digit": "4", "source": "metar" },
-  { "region": "North Coast", "regionDigit": "3", "icao": "CBBC", "name": "Bella Coola", "digit": "5", "source": "metar" }
+  { "region": "North Coast", "regionDigit": "3", "icao": "CBBC", "name": "Bella Coola", "digit": "5", "source": "metar" },
+  { "region": "Interior", "regionDigit": "4", "icao": "CYLW", "name": "Kelowna", "digit": "1", "source": "metar" },
+  { "region": "Interior", "regionDigit": "4", "icao": "CYKA", "name": "Kamloops", "digit": "2", "source": "metar" },
+  { "region": "Interior", "regionDigit": "4", "icao": "CYXS", "name": "Prince George", "digit": "3", "source": "metar" },
+  { "region": "Interior", "regionDigit": "4", "icao": "CYQQ", "name": "Comox", "digit": "4", "source": "metar" }
 ]

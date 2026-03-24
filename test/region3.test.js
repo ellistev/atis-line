@@ -65,8 +65,8 @@ describe('Region 3 - North Coast (METAR)', () => {
       }
     });
 
-    it('has 14 total airports', () => {
-      assert.equal(AIRPORTS_LIST.length, 14);
+    it('has 18 total airports', () => {
+      assert.equal(AIRPORTS_LIST.length, 18);
     });
 
     it('existing airports have source=aeroview', () => {
@@ -107,7 +107,7 @@ describe('Region 3 - North Coast (METAR)', () => {
   });
 
   describe('Health check includes METAR airports', () => {
-    it('health endpoint includes all 14 airports', async () => {
+    it('health endpoint includes all 18 airports', async () => {
       const res = await new Promise((resolve, reject) => {
         http.get(`${baseUrl}/health`, (r) => {
           let text = '';
@@ -116,7 +116,7 @@ describe('Region 3 - North Coast (METAR)', () => {
         }).on('error', reject);
       });
       const body = JSON.parse(res.text);
-      assert.equal(Object.keys(body.airports).length, 14);
+      assert.equal(Object.keys(body.airports).length, 18);
       assert.ok(body.airports.CYPR);
       assert.ok(body.airports.CBBC);
     });
