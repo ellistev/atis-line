@@ -276,7 +276,7 @@ async function refreshAtisData() {
         logger.info(`  ${icao}: information ${result.letter} (unchanged, skipping TTS)`);
       } else {
         const speechText = await humanizeAtis(result.raw, name);
-        await updateCache(icao, speechText, result.letter);
+        await updateCache(icao, speechText, result.letter, { provider: 'elevenlabs' });
         recordSuccess(icao);
         logger.info(`  ${icao}: information ${result.letter || '?'}`);
       }
@@ -287,20 +287,27 @@ async function refreshAtisData() {
   }
 
   // Process METAR airports
+  // Use OpenAI TTS for METAR airports (cheaper, saves ElevenLabs credits for aeroview D-ATIS)
   for (const { icao, name } of metarAirports) {
     const result = metarResults.get(icao);
     if (result && result.raw) {
       const cached = getCache(icao);
-      // Use observation time as change key (like ATIS letter for D-ATIS)
-      if (cached && cached.letter && cached.letter === result.observationTime) {
+      // Strip observation time from METAR for weather-only change detection.
+      // Raw METAR format: "CYPR 221800Z 31008KT 15SM ..." - strip the DDHHMMZ token
+      // so identical weather with a new observation time doesn't trigger a regen.
+      const weatherContent = result.raw.replace(/^(?:(?:METAR|SPECI)\s+)?[A-Z]{4}\s+\d{6}Z\s/, '').trim();
+      const weatherKey = `wx:${weatherContent}`;
+      if (cached && cached.weatherKey && cached.weatherKey === weatherKey) {
         cached.updatedAt = new Date().toISOString();
+        cached.letter = result.observationTime; // update display time
         recordSuccess(icao);
-        logger.info(`  ${icao}: METAR ${result.observationTime} (unchanged, skipping TTS)`);
+        logger.info(`  ${icao}: METAR ${result.observationTime} (weather unchanged, skipping TTS)`);
       } else {
         const speechText = await humanizeAtis(result.raw, name, { source: 'metar' });
-        await updateCache(icao, speechText, result.observationTime);
+        const cacheEntry = await updateCache(icao, speechText, result.observationTime, { provider: 'openai' });
+        cacheEntry.weatherKey = weatherKey; // stash for next comparison
         recordSuccess(icao);
-        logger.info(`  ${icao}: METAR ${result.observationTime}`);
+        logger.info(`  ${icao}: METAR ${result.observationTime} (weather changed, regenerated with OpenAI TTS)`);
       }
     } else {
       // No fresh METAR — keep last known weather if we have it

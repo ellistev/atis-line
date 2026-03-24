@@ -28,13 +28,16 @@ function pickVoice() {
  *
  * @param {string} text - The speech text to convert
  * @param {string} outputPath - Where to write the MP3 file
+ * @param {Object} [options] - Optional overrides
+ * @param {string} [options.provider] - Force a specific provider ('elevenlabs'|'openai'|'polly'), overrides TTS_PROVIDER env
  * @returns {Promise<boolean>} true if a file was generated, false if using <Say> fallback
  */
-async function generateAudio(text, outputPath) {
-  if (TTS_PROVIDER === 'elevenlabs') {
+async function generateAudio(text, outputPath, options = {}) {
+  const provider = options.provider || TTS_PROVIDER;
+  if (provider === 'elevenlabs') {
     return generateElevenLabs(text, outputPath);
   }
-  if (TTS_PROVIDER === 'openai') {
+  if (provider === 'openai') {
     return generateOpenAI(text, outputPath);
   }
   // Default 'polly': no file generation — Twilio <Say> handles TTS at call time for free

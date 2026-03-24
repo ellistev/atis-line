@@ -23,9 +23,11 @@ function hashText(text) {
  * @param {string} icao - Airport ICAO code
  * @param {string} speechText - Formatted ATIS speech text
  * @param {string} letter - Current ATIS letter (e.g., "Bravo")
+ * @param {Object} [options] - Optional overrides
+ * @param {string} [options.provider] - Force a specific TTS provider ('elevenlabs'|'openai'|'polly')
  * @returns {Promise<Object>} Cache entry { speechText, speechHash, audioFile, hasAudio, letter }
  */
-async function updateCache(icao, speechText, letter) {
+async function updateCache(icao, speechText, letter, options = {}) {
   const newHash = hashText(speechText);
   const existing = cache.get(icao);
 
@@ -39,9 +41,9 @@ async function updateCache(icao, speechText, letter) {
   await mkdir(AUDIO_DIR, { recursive: true });
   const audioFile = path.join(AUDIO_DIR, `${icao}.mp3`);
 
-  const hasAudio = await generateAudio(speechText, audioFile);
+  const hasAudio = await generateAudio(speechText, audioFile, { provider: options.provider });
   if (hasAudio) {
-    console.log(`${icao} ATIS updated to information ${letter} (audio cached)`);
+    console.log(`${icao} ATIS updated to information ${letter} (audio cached via ${options.provider || 'default'})`);
   } else {
     console.log(`${icao} ATIS updated to information ${letter} (using live TTS)`);
   }
