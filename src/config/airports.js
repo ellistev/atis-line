@@ -67,7 +67,7 @@ function generateTopGreeting(regions) {
     })
     .join(' ');
   return (
-    'Welcome to Lower Mainland and Vancouver Island aviation weather. ' +
+    'Welcome to British Columbia aviation weather. ' +
     'The service NAV CANADA didn\'t love enough to keep. ' +
     'We\'re not official, but we\'ve got you covered. ' +
     items + ' ' +
