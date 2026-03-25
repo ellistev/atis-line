@@ -11,6 +11,7 @@ const { recordSuccess, recordFailure, checkAlerts } = require('./src/monitoring/
 const { startWatchdog } = require('./src/monitoring/watchdog');
 const { logCall } = require('./src/analytics/logger');
 const { readAnalytics, computeStats, renderDashboard } = require('./src/analytics/dashboard');
+const { renderLandingPage, getRegionData } = require('./src/landing/landing');
 const logger = require('./src/logger');
 
 const app = express();
@@ -190,6 +191,12 @@ app.post('/region-menu/:regionDigit', (req, res) => {
   gather.say(VOICE, generateRegionGreeting(region));
   twiml.redirect('/voice');
   res.type('text/xml').send(twiml.toString());
+});
+
+// --- Landing page ---
+app.get('/', (req, res) => {
+  const regions = getRegionData();
+  res.type('text/html').send(renderLandingPage(regions));
 });
 
 // --- Analytics dashboard ---
