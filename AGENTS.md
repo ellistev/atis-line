@@ -74,10 +74,23 @@ Provider is passed through `updateCache()` -> `tts.js`. The `provider` field in 
 
 ## Deployment
 
-- **Server:** 178.156.208.66 (Hetzner), path `/var/www/atis-line`
+- **Server:** 204.168.181.5 (Hetzner Helsinki, CPX22), path `/var/www/atis-line`
+- **Domain:** https://atisline.ca
 - **Process:** PM2 as `atis-line`
 - **Auto-deploy:** Push to `main` triggers GitHub Actions -> SSH -> `git pull && npm install && pm2 restart`
-- **Manual deploy:** `ssh root@178.156.208.66 "cd /var/www/atis-line && git pull && pm2 restart atis-line"`
+- **SSL:** Let's Encrypt (certbot, auto-renew)
+- **Reverse proxy:** nginx on port 80/443 -> localhost:3341
+- **DNS:** Cloudflare (A record -> 204.168.181.5, www CNAME -> atisline.ca)
+- **Twilio webhook:** https://atisline.ca/voice (POST)
+
+### Production History
+
+| Date | Change | Issues |
+|------|--------|--------|
+| 2026-03-24 | Migrated from shared server (178.156.208.66) to dedicated VPS (204.168.181.5). DNS moved from Squarespace to Cloudflare. SSL via Let's Encrypt. Twilio webhook switched to atisline.ca. | #61, #62, #63, #65 |
+| 2026-03-24 | Smart METAR change detection + split TTS providers (aeroview->ElevenLabs, METAR->OpenAI) | - |
+| 2026-03-24 | finishOnKey fix (# button during playback), timezone-aware dashboard | #56/#57, #58 |
+| 2026-03-24 | GitHub Actions auto-deploy fixed (deploy key + secrets configured) | - |
 
 ## Regions & Airports (18 total)
 

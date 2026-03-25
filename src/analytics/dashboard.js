@@ -314,9 +314,64 @@ ${cs ? `<div class="cost-section">
     <div class="cost-item"><div class="cost-label">Today</div><div class="cost-value">${cs.todayChars.toLocaleString()}</div><div class="sub">${cs.todayGenerations} generations</div></div>
     <div class="cost-item"><div class="cost-label">This Month</div><div class="cost-value">${cs.monthChars.toLocaleString()}</div><div class="sub">${cs.monthGenerations} generations</div></div>
     <div class="cost-item"><div class="cost-label">Avg Daily</div><div class="cost-value">${cs.avgDailyChars.toLocaleString()}</div><div class="sub">over ${cs.activeDays} days</div></div>
-    <div class="cost-item"><div class="cost-label">Projected Monthly</div><div class="cost-value">${cs.projectedMonthlyChars.toLocaleString()}</div><div class="sub">credits at current rate</div></div>
+    <div class="cost-item"><div class="cost-label">Projected Monthly</div><div class="cost-value">${cs.projectedMonthlyChars.toLocaleString()}</div><div class="sub">of 2,000,000 limit (${Math.round(cs.projectedMonthlyChars / 2000000 * 100)}%)</div></div>
     <div class="cost-item"><div class="cost-label">All Time</div><div class="cost-value">${cs.totalChars.toLocaleString()}</div><div class="sub">${cs.totalGenerations} generations</div></div>
-    <div class="cost-item"><div class="cost-label">Creator Plan Fit</div><div class="cost-value">${cs.projectedMonthlyChars <= 100000 ? 'Within 100K' : Math.round((cs.projectedMonthlyChars - 100000) / 1000) + 'K overage'}</div><div class="sub">${cs.projectedMonthlyChars <= 100000 ? '$22/mo' : '$22 + $' + ((cs.projectedMonthlyChars - 100000) / 1000 * 0.30).toFixed(2) + ' overage'}</div></div>
+    <div class="cost-item"><div class="cost-label">Budget Pace</div><div class="cost-value">${cs.projectedMonthlyChars <= 2000000 ? '✅ On track' : '🔴 Over budget'}</div><div class="sub">${cs.projectedMonthlyChars <= 2000000 ? Math.round((2000000 - cs.projectedMonthlyChars) / 1000) + 'K headroom' : Math.round((cs.projectedMonthlyChars - 2000000) / 1000) + 'K over'}</div></div>
+  </div>
+</div>
+
+<div class="cost-section">
+  <h2>TTS Generations by Airport (Today)</h2>
+  <table>
+    <thead><tr><th>Airport</th><th>Gens Today</th><th>Chars Today</th><th>Avg Chars/Gen</th><th>Total Gens</th><th>Total Chars</th><th>Last Generation</th></tr></thead>
+    <tbody>
+      ${(cs.airportBreakdown || []).map(a => `<tr>
+        <td><strong>${a.icao}</strong></td>
+        <td>${a.todayGens}</td>
+        <td>${a.todayChars.toLocaleString()}</td>
+        <td>${a.avgChars}</td>
+        <td>${a.totalGens}</td>
+        <td>${a.totalChars.toLocaleString()}</td>
+        <td>${a.lastGen ? new Date(a.lastGen).toLocaleString() : '—'}</td>
+      </tr>`).join('\n      ')}
+      <tr style="font-weight:700;border-top:2px solid #333">
+        <td>TOTAL</td>
+        <td>${cs.todayGenerations}</td>
+        <td>${cs.todayChars.toLocaleString()}</td>
+        <td>${cs.todayGenerations > 0 ? Math.round(cs.todayChars / cs.todayGenerations) : 0}</td>
+        <td>${cs.totalGenerations}</td>
+        <td>${cs.totalChars.toLocaleString()}</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="charts">
+  <div class="chart-box">
+    <h2>TTS Generations per Hour (Today, UTC)</h2>
+    <canvas id="genHourlyChart"></canvas>
+  </div>
+  <div class="chart-box">
+    <h2>Credits by Airport (Today)</h2>
+    <canvas id="genAirportChart"></canvas>
+  </div>
+</div>
+
+<div class="cost-section">
+  <h2>Today's Generation Log (newest first)</h2>
+  <div style="max-height:400px;overflow-y:auto">
+  <table>
+    <thead><tr><th>Time (UTC)</th><th>Airport</th><th>Chars</th><th>Voice</th></tr></thead>
+    <tbody>
+      ${(cs.todayGenerationLog || []).slice(0, 100).map(e => `<tr>
+        <td>${e.timestamp.slice(11, 19)}</td>
+        <td>${e.icao}</td>
+        <td>${e.chars}</td>
+        <td>${e.voice}</td>
+      </tr>`).join('\n      ')}
+    </tbody>
+  </table>
   </div>
 </div>` : '<!-- No credit tracking data yet -->'}
 
@@ -419,6 +474,42 @@ new Chart(document.getElementById('callerTypeChart'), {
   },
   options: { responsive: true }
 });
+
+${cs ? `
+// TTS generations per hour chart
+if (document.getElementById('genHourlyChart')) {
+  new Chart(document.getElementById('genHourlyChart'), {
+    type: 'bar',
+    data: {
+      labels: ${JSON.stringify(Array.from({ length: 24 }, (_, i) => i + ':00'))},
+      datasets: [{ label: 'Generations', data: ${JSON.stringify(cs.hourlyGenerations || [])}, backgroundColor: '#ef4444' }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+  });
+}
+
+// Credits by airport (today) chart
+if (document.getElementById('genAirportChart')) {
+  new Chart(document.getElementById('genAirportChart'), {
+    type: 'bar',
+    data: {
+      labels: ${JSON.stringify((cs.airportBreakdown || []).map(a => a.icao))},
+      datasets: [
+        { label: 'Chars', data: ${JSON.stringify((cs.airportBreakdown || []).map(a => a.todayChars))}, backgroundColor: '#ef4444' },
+        { label: 'Generations', data: ${JSON.stringify((cs.airportBreakdown || []).map(a => a.todayGens))}, backgroundColor: '#f59e0b', yAxisID: 'y1' }
+      ]
+    },
+    options: {
+      responsive: true,
+      indexAxis: 'y',
+      scales: {
+        x: { beginAtZero: true, position: 'bottom', title: { display: true, text: 'Characters' } },
+        y1: { beginAtZero: true, position: 'top', display: false }
+      }
+    }
+  });
+}
+` : ''}
 </script>
 <footer style="margin-top: 24px; text-align: center; color: #999; font-size: 0.8em;">
   All times shown in ${DEFAULT_TIMEZONE}

@@ -59,6 +59,9 @@ function computeCreditStats(entries, now = new Date()) {
   let monthGenerations = 0;
   const dailyChars = {}; // dateStr -> chars
   const airportChars = {}; // icao -> chars
+  const airportGens = {}; // icao -> { count, chars, lastGen, todayCount, todayChars }
+  const todayLog = []; // individual generation entries for today
+  const hourlyGens = {}; // hour -> count (today only)
 
   for (const entry of entries) {
     if (!entry.success) continue;
@@ -72,6 +75,9 @@ function computeCreditStats(entries, now = new Date()) {
     if (dateStr === todayStr) {
       todayChars += entry.chars;
       todayGenerations++;
+      todayLog.push(entry);
+      const hour = new Date(entry.timestamp).getUTCHours();
+      hourlyGens[hour] = (hourlyGens[hour] || 0) + 1;
     }
 
     if (entryMonth === monthStr) {
@@ -83,6 +89,18 @@ function computeCreditStats(entries, now = new Date()) {
 
     if (entry.icao) {
       airportChars[entry.icao] = (airportChars[entry.icao] || 0) + entry.chars;
+
+      if (!airportGens[entry.icao]) {
+        airportGens[entry.icao] = { count: 0, chars: 0, lastGen: null, todayCount: 0, todayChars: 0 };
+      }
+      const ag = airportGens[entry.icao];
+      ag.count++;
+      ag.chars += entry.chars;
+      ag.lastGen = entry.timestamp;
+      if (dateStr === todayStr) {
+        ag.todayCount++;
+        ag.todayChars += entry.chars;
+      }
     }
   }
 
@@ -98,6 +116,25 @@ function computeCreditStats(entries, now = new Date()) {
   const topAirports = Object.entries(airportChars)
     .sort((a, b) => b[1] - a[1]);
 
+  // Per-airport breakdown sorted by today's chars desc
+  const airportBreakdown = Object.entries(airportGens)
+    .map(([icao, ag]) => ({
+      icao,
+      totalGens: ag.count,
+      totalChars: ag.chars,
+      todayGens: ag.todayCount,
+      todayChars: ag.todayChars,
+      avgChars: ag.count > 0 ? Math.round(ag.chars / ag.count) : 0,
+      lastGen: ag.lastGen,
+    }))
+    .sort((a, b) => b.todayChars - a.todayChars);
+
+  // Today's generation log (newest first)
+  const todayGenerationLog = todayLog.reverse();
+
+  // Hourly generation heatmap (0-23 UTC)
+  const hourlyGenerations = Array.from({ length: 24 }, (_, i) => hourlyGens[i] || 0);
+
   return {
     totalChars,
     totalGenerations,
@@ -110,6 +147,9 @@ function computeCreditStats(entries, now = new Date()) {
     activeDays,
     dailyTrend,
     topAirports,
+    airportBreakdown,
+    todayGenerationLog,
+    hourlyGenerations,
   };
 }
 
