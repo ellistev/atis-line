@@ -260,6 +260,14 @@ function formatForSpeech(raw, icao, name, letter) {
 }
 
 async function refreshAtisData() {
+  // Only scrape between 7am and midnight Pacific (GA airports closed overnight)
+  const pacificHour = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', hour12: false });
+  const hour = parseInt(pacificHour, 10);
+  if (hour < 7) {
+    logger.info(`[${new Date().toISOString()}] Skipping refresh - ${hour}:00 PT is outside active hours (07:00-00:00)`);
+    return;
+  }
+
   logger.info(`[${new Date().toISOString()}] Refreshing ATIS data...`);
 
   // Split airports by source
