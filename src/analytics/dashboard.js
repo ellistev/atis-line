@@ -1,5 +1,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
+const { getLocalDateStr, getLocalWeekStartStr, DEFAULT_TIMEZONE } = require('../utils/timezone');
 
 const ANALYTICS_PATH = path.join(__dirname, '..', '..', 'analytics.jsonl');
 
@@ -32,12 +33,10 @@ function readAnalytics(filePath = ANALYTICS_PATH) {
  */
 function computeStats(entries, now = new Date(), costConfig = {}) {
   const costs = { ...COST_DEFAULTS, ...costConfig };
-  const todayStr = now.toISOString().slice(0, 10);
+  const todayStr = getLocalDateStr(now);
 
-  // Week start (Monday)
-  const weekStart = new Date(now);
-  weekStart.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1));
-  weekStart.setHours(0, 0, 0, 0);
+  // Week start (Monday) in local timezone
+  const weekStartStr = getLocalWeekStartStr(now);
 
   let todayCalls = 0;
   let weekCalls = 0;
@@ -55,10 +54,10 @@ function computeStats(entries, now = new Date(), costConfig = {}) {
 
   for (const entry of entries) {
     const ts = new Date(entry.timestamp);
-    const dateStr = entry.timestamp.slice(0, 10);
+    const dateStr = getLocalDateStr(ts);
 
     if (dateStr === todayStr) todayCalls++;
-    if (ts >= weekStart) weekCalls++;
+    if (dateStr >= weekStartStr) weekCalls++;
 
     // Airport counts
     if (entry.airport) {
@@ -421,6 +420,9 @@ new Chart(document.getElementById('callerTypeChart'), {
   options: { responsive: true }
 });
 </script>
+<footer style="margin-top: 24px; text-align: center; color: #999; font-size: 0.8em;">
+  All times shown in ${DEFAULT_TIMEZONE}
+</footer>
 </body>
 </html>`;
 }

@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const { appendFile } = require('node:fs/promises');
 const path = require('node:path');
+const { getLocalDateStr, getLocalMonthStr } = require('../utils/timezone');
 
 const CREDITS_LOG_PATH = path.join(__dirname, '..', '..', 'elevenlabs-credits.jsonl');
 
@@ -47,8 +48,8 @@ function readCreditLog(filePath = CREDITS_LOG_PATH) {
  * @returns {Object} Usage stats
  */
 function computeCreditStats(entries, now = new Date()) {
-  const todayStr = now.toISOString().slice(0, 10);
-  const monthStr = now.toISOString().slice(0, 7); // YYYY-MM
+  const todayStr = getLocalDateStr(now);
+  const monthStr = getLocalMonthStr(now);
 
   let totalChars = 0;
   let totalGenerations = 0;
@@ -61,8 +62,9 @@ function computeCreditStats(entries, now = new Date()) {
 
   for (const entry of entries) {
     if (!entry.success) continue;
-    const dateStr = entry.timestamp.slice(0, 10);
-    const entryMonth = entry.timestamp.slice(0, 7);
+    const entryDate = new Date(entry.timestamp);
+    const dateStr = getLocalDateStr(entryDate);
+    const entryMonth = getLocalMonthStr(entryDate);
 
     totalChars += entry.chars;
     totalGenerations++;
